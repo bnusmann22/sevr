@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sevr
+      POSTGRES_PASSWORD: sevr
+      POSTGRES_DB: sevr
+    ports: ["5432:5432"]
+    volumes: ["db_data:/var/lib/postgresql/data"]
+
+  nextcloud:
+    image: nextcloud:29
+    restart: unless-stopped
+    depends_on: [db]
+    ports: ["8080:80"]
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: sevr
+      POSTGRES_USER: sevr
+      POSTGRES_PASSWORD: sevr
+    volumes: ["nextcloud_data:/var/www/html"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    restart: unless-stopped
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports: ["8081:8080"]
+
+  # --- Backend API service: uncomment once Aroyehun's FastAPI app exists in /api ---
+  # api:
+  #   build: ./api
+  #   restart: unless-stopped
+  #   depends_on: [db, nextcloud, keycloak]
+  #   ports: ["8000:8000"]
+  #   env_file: .env
+  #   volumes: ["./api:/app"]
+
+volumes:
+  db_data:
+  nextcloud_data:
