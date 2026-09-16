@@ -1,6 +1,6 @@
 // These types are the contract between frontend and backend.
 // Keep this file in sync with whatever OpenAPI schema the FastAPI
-// backend eventually publishes. Until then, this file IS the contract —
+// backend eventually publishes. Until then, this file IS the contract:
 // Aroyehun should build the API to match these shapes.
 
 export type TLPLabel = "WHITE" | "GREEN" | "AMBER" | "RED";

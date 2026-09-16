@@ -19,13 +19,13 @@ export default function UploadPage() {
         value={label}
         onChange={(e) => setLabel(e.target.value as TLPLabel)}
       >
-        <option value="WHITE">WHITE — no confidentiality requirement</option>
-        <option value="GREEN">GREEN — internal collaboration</option>
-        <option value="AMBER">AMBER — sensitive, pre-publication</option>
-        <option value="RED">RED — irreversible harm if exposed</option>
+        <option value="WHITE">WHITE: no confidentiality requirement</option>
+        <option value="GREEN">GREEN: internal collaboration</option>
+        <option value="AMBER">AMBER: sensitive, pre-publication</option>
+        <option value="RED">RED: irreversible harm if exposed</option>
       </select>
       <p className="text-xs text-neutral-500 mt-2">
-        A default label is suggested by file type, but is always confirmed by a human — per PRD Section 3, step 2.
+        A default label is suggested by file type, but is always confirmed by a human, per PRD Section 3, step 2.
       </p>
     </div>
   );

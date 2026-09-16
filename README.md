@@ -1,16 +1,16 @@
-# SeVR — Scoped Enclave for Varsity Research
+# SeVR: Scoped Enclave for Varsity Research
 
-ICSC 2026 Universities Hackathon — Track F1, Protecting University Research.
+ICSC 2026 Universities Hackathon: Track F1, Protecting University Research.
 See `docs/` for the Project Charter and Product Requirements Document.
 
 ## Current status
 
 Frontend is being built now, against a mocked API (MSW), so UI work isn't
-blocked on the backend. Backend (`api/`) will be built next — data shapes
+blocked on the backend. Backend (`api/`) will be built next: data shapes
 the backend must match live in `frontend/src/types/index.ts` and
 `frontend/src/mocks/handlers.ts`.
 
-## Quick start — frontend only (what you need right now)
+## Quick start: frontend only (what you need right now)
 
 ```bash
 cd frontend
@@ -20,10 +20,10 @@ npm run dev
 ```
 
 Opens at `http://localhost:5173`. Every screen (workspace, upload,
-export/share, audit trail) works against realistic mock data — no backend
+export/share, audit trail) works against realistic mock data; no backend
 or Docker required for this.
 
-## Quick start — full stack (once the backend exists)
+## Quick start: full stack (once the backend exists)
 
 ```bash
 cp .env.example .env
@@ -56,7 +56,7 @@ for exact request/response shapes):
 
 - `GET /projects`
 - `GET /projects/:id/files`
-- `POST /files/:id/export` — implements the TLP decision table in the PRD, Section 5.1
+- `POST /files/:id/export`: implements the TLP decision table in the PRD, Section 5.1
 - `GET /projects/:id/audit`
 
 Match those shapes and the frontend needs no changes beyond flipping
