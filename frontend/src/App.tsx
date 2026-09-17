@@ -4,6 +4,7 @@ import ShowcaseOverviewPage from "./pages/showcase/ShowcaseOverviewPage";
 import ShowcaseSecurityPage from "./pages/showcase/ShowcaseSecurityPage";
 import ShowcaseWorkflowsPage from "./pages/showcase/ShowcaseWorkflowsPage";
 import ShowcaseSevrPage from "./pages/showcase/ShowcaseSevrPage";
+import ShowcaseAboutPage from "./pages/showcase/ShowcaseAboutPage";
 import ShowcaseDocsPage from "./pages/showcase/ShowcaseDocsPage";
 import LoginPage from "./pages/LoginPage";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
@@ -28,6 +29,9 @@ export default function App() {
 
         <Route path="/sevr" element={<ShowcaseSevrPage />} />
         <Route path="/landing/sevr" element={<ShowcaseSevrPage />} />
+
+        <Route path="/about" element={<ShowcaseAboutPage />} />
+        <Route path="/landing/about" element={<ShowcaseAboutPage />} />
 
         <Route path="/docs" element={<ShowcaseDocsPage />} />
         <Route path="/landing/docs" element={<ShowcaseDocsPage />} />

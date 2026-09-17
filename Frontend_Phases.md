@@ -276,7 +276,7 @@ Establish core dependencies, Vite configuration, Tailwind design tokens matching
 
 ## 4. TRACK A: Public Showcase Website & Educational Portal (`/` & Sub-Pages)
 
-*(Focuses on university hackathon demonstration, project charter, 3D WebGL visualizations, interactive feature simulators, documentation, and comprehensive legal/credits footer. Fully accessible without authentication.)*
+*(Focuses on university hackathon demonstration, project charter, 3D WebGL visualizations, interactive feature simulators, documentation, container inspector, and comprehensive legal/credits footer. Fully accessible without authentication.)*
 
 ### Phase A1: Public Website Layout, Rich Footer & Main Landing Home (`/`)
 
@@ -284,47 +284,49 @@ Establish core dependencies, Vite configuration, Tailwind design tokens matching
 Build the persistent showcase navigation header, rich multi-column footer, and Page 1 main hero overview (`/`) featuring a 3D WebGL enclave particle shield and live project metrics.
 
 #### Deliverables
-- [ ] **`ShowcaseNavbar.tsx`**: Glassmorphic header with navigation links:
+- [x] **`ShowcaseNavbar.tsx`**: Glassmorphic header with navigation links:
   - `Overview` (`/`)
   - `Security Architecture` (`/security`)
   - `Workflows` (`/workflows`)
   - `Project Charter` (`/about`)
   - `Documentation` (`/docs`)
   - Glowing 3D logo hover effect and prominent `"Sign In / Launch Enclave"` CTA button.
-- [ ] **`ShowcaseFooter.tsx`**: Comprehensive, multi-column footer containing:
+- [x] **`ShowcaseFooter.tsx`**: Comprehensive, multi-column footer containing:
   - **Column 1: Platform & Security**: Enclave Overview, TLP 2.0 Security Protocol specs, SHA-256 Hash-chain integrity checks, System Status link.
   - **Column 2: Legal & Governance**: Privacy Policy (`/privacy`), Terms of Service & Data Governance (`/terms`), NIST SP 800-171 Compliance Statement.
   - **Column 3: Documentation & Resources**: Documentation Site Link (`/docs`), Public Developer API Specs, User Guide, Contact Admin Helpdesk link.
   - **Column 4: Creators & Acknowledgments**: Author credits (Jamil Muhammad Abdullahi, Bayero University Kano), ICSC 2026 Universities Hackathon (Track F1) details.
-- [ ] **`ShowcaseOverviewPage.tsx` (`/`)**:
+- [x] **`ShowcaseOverviewPage.tsx` (`/`)**:
   - **3D Canvas (`EnclaveShieldCanvas.tsx`)**: Interactive 3D particle sphere built with `@react-three/fiber` that distorts and glows dynamically based on user cursor tracking.
   - **Hero Typography & Motion**: Framer Motion staggered entrance animations showcasing SeVR 1.0 value proposition.
   - **Live Metric Counter Cards**: Micro-animations highlighting zero data leakage guarantees, ABAC revocation, and hash-chain audit tracking.
 
 ---
 
-### Phase A2: Interactive Security, Workflows, Charter & Documentation Pages (`/security`, `/workflows`, `/about`, `/docs`)
+### Phase A2: Interactive Security, Workflows, Charter, Container Inspector & Documentation Pages (`/security`, `/workflows`, `/about`, `/sevr`, `/docs`)
 
 #### Objective
-Construct Pages 2, 3, 4, and 5 of the public website explaining SeVR's security architecture, workflow automation, project charter, and public compliance documentation.
+Construct Pages 2, 3, 4, 5, and 6 of the public website explaining SeVR's security architecture, workflow automation, project charter, container packaging engine, and public compliance documentation.
 
 #### Deliverables
-- [ ] **Page 2: Security Architecture (`ShowcaseSecurityPage.tsx` - `/security`)**:
+- [x] **Page 2: Security Architecture (`ShowcaseSecurityPage.tsx` - `/security`)**:
   - **3D TLP 2.0 Visualizer (`TlpSpectrumCanvas.tsx`)**: WebGL particle scene shifting dynamically across FIRST TLP 2.0 spectrum states (`CLEAR` -> `GREEN` -> `AMBER` -> `AMBER+STRICT` -> `RED`).
   - **Container Transformation Diagram (`SevrTransformationDiagram.tsx`)**: Interactive step-by-step visual showing native file conversion into `.sevr` encrypted containers.
   - **Hash Chain Block Visualizer (`HashChainVisualizer.tsx`)**: Animated connected block sequence demonstrating SHA-256 integrity checks.
-- [ ] **Page 3: Platform Workflows (`ShowcaseWorkflowsPage.tsx` - `/workflows`)**:
+- [x] **Page 3: Platform Workflows (`ShowcaseWorkflowsPage.tsx` - `/workflows`)**:
   - **Interactive Workflow Simulator (`WorkflowSimulator.tsx`)**: Step-by-step timeline allowing visitors to simulate:
     1. Student document upload with automatic TLP tag.
     2. Supervisor approval toggle.
     3. Instant ABAC member revocation (clicking "Revoke" snaps permissions shut with a visual pulse).
     4. Mass-download anomaly alert trigger.
     5. External link expiration countdown.
-- [ ] **Page 4: Project Charter & Tech Mesh (`ShowcaseAboutPage.tsx` - `/about`)**:
+- [x] **Page 4: Project Charter & Tech Mesh (`ShowcaseAboutPage.tsx` - `/about`)**:
   - **3D Tech Mesh Canvas (`TechMeshCanvas.tsx`)**: Force-directed 3D node graph displaying tech stack connections (React, TypeScript, Keycloak, FastAPI, PostgreSQL, `.sevr` Container Engine).
   - **Hackathon Context & Team Card**: Bayero University Kano track details and team attributes.
   - **Project Charter Accordion (`CharterAccordion.tsx`)**: Problem statement, non-functional requirements, and architecture principles.
-- [ ] **Page 5: Documentation & Compliance Portal (`ShowcaseDocsPage.tsx` - `/docs`)**:
+- [x] **Page 5: Container Packaging Inspector (`ShowcaseSevrPage.tsx` - `/sevr`)**:
+  - Dedicated interactive inspector explaining `.sevr` AES-256 GCM envelope header structure, TLP metadata encapsulation, and zero-trust container decryption workflows.
+- [x] **Page 6: Documentation & Compliance Portal (`ShowcaseDocsPage.tsx` - `/docs`)**:
   - Public documentation viewer covering enclave deployment architecture, TLP 2.0 policy guidelines, REST API reference, and NIST SP 800-171 compliance controls.
 
 ---
@@ -339,7 +341,7 @@ Construct Pages 2, 3, 4, and 5 of the public website explaining SeVR's security 
 Provide flexible authentication (Institution Email/Password registration/login alongside Keycloak OIDC SSO), explicit administrator contact instructions with support links on the auth page, establish route protection guards, and render the persistent operational application shell.
 
 #### Deliverables
-- [ ] **Authentication Gateway (`/login` & `/signup`)**:
+- [x] **Authentication Gateway (`/login` & `/signup`)**:
   - **Dual Authentication Modes**:
     - **Option 1: Institution Email & Password**: Registration and authentication for university accounts (`@*.edu.ng`, `@*.edu` validation regex). Includes password strength meter and verification OTP link trigger.
     - **Option 2: Single Sign-On (SSO / Keycloak OIDC)**: Single-click button initiating OAuth 2.0 PKCE (RFC 7636) token exchange for federated identity providers.
@@ -347,9 +349,9 @@ Provide flexible authentication (Institution Email/Password registration/login a
     - Embedded assistance box on the auth form: *"Need Enclave Access, Supervisor Escalation, or Account Recovery?"*
     - Clear step-by-step instructions on contacting the institution administrator.
     - Direct support link (`/support` modal or `mailto:sevr-admin@buk.edu.ng` link).
-- [ ] **Auth Route Protection (`src/components/auth/ProtectedRoute.tsx`)**:
+- [x] **Auth Route Protection (`src/components/auth/ProtectedRoute.tsx`)**:
   - Wraps operational routes, validating JWT claims, expiration, and user roles (`researcher`, `supervisor`, `admin`). Unauthenticated users are redirected to `/login`.
-- [ ] **Authenticated Application Shell (`src/components/layout/Shell.tsx`)**:
+- [x] **Authenticated Application Shell (`src/components/layout/Shell.tsx`)**:
   - **`Sidebar.tsx`**: Project navigation (`/home`), Upload (`/upload`), Export & Share (`/export`), Detection Queue (`/alerts`), Audit Trail (`/audit`), active enclave badge.
   - **`TopBar.tsx`**: Enclave breadcrumbs, global search, user identity chip (Name, Department, Role badge), notification drawer, logout trigger.
   - **`OfflineBanner.tsx`**: Network state detector displaying top banner when offline (*"Offline Mode: Read-Only Enclave Access"*).
@@ -362,10 +364,10 @@ Provide flexible authentication (Institution Email/Password registration/login a
 Deliver operational screens for browsing projects, managing research files, tracking activity feeds, and enforcing Attribute-Based Access Control (ABAC) on project memberships.
 
 #### Deliverables
-- [ ] **Project List View (`src/pages/ProjectListPage.tsx` - `/home`)**:
+- [x] **Project List View (`src/pages/ProjectListPage.tsx` - `/home`)**:
   - Grid/Table layout displaying research projects, TLP summary, and member count.
   - **`CreateProjectModal.tsx`**: Dialog for creating new research projects (restricted to PIs/Supervisors).
-- [ ] **Project Workspace View (`src/pages/ProjectWorkspacePage.tsx` - `/projects/:id`)**:
+- [x] **Project Workspace View (`src/pages/ProjectWorkspacePage.tsx` - `/projects/:id`)**:
   - **Files Tab (`UploadDropzone.tsx`, `FileList.tsx`)**: Drag-and-drop uploader with TLP classification selector, upload progress bars, and file search.
   - **Activity Tab (`ActivityFeed.tsx`)**: Chronological audit timeline showing file additions, shares, export requests, and permission updates.
   - **Members Tab (`MemberList.tsx`)**: Member management panel with instant ABAC revocation trigger (*"Revoke Member"* button instantly terminates access rights).
@@ -379,17 +381,17 @@ Deliver operational screens for browsing projects, managing research files, trac
 Implement the security core: TLP 2.0 badge and selector UI, the Export Decision Engine UI (supporting native format vs `.sevr` container outcomes), and signed external sharing.
 
 #### Deliverables
-- [ ] **TLP 2.0 Security Components (`src/components/tlp/`)**:
+- [x] **TLP 2.0 Security Components (`src/components/tlp/`)**:
   - **`TlpBadge.tsx`**: Color-coded badge supporting FIRST TLP 2.0 levels (`CLEAR`, `GREEN`, `AMBER`, `AMBER+STRICT`, `RED`) with informative hover tooltips.
   - **`TlpSelector.tsx`**: Selector input enforcing privilege checks (disables `RED` / `AMBER+STRICT` selection for standard researchers without PI approval).
-- [ ] **Export & Portability Engine UI (`src/components/sharing/`)**:
+- [x] **Export & Portability Engine UI (`src/components/sharing/`)**:
   - **`ExportDialog.tsx`**: Modal requesting export destination and format parameters.
   - **`ExportOutcomeBanner.tsx`**: Dynamic outcome status banner:
     - **Native Format**: Green confirmation banner showing direct file download link.
     - **Forced `.sevr` Container**: Amber warning banner explaining policy rationale (*"TLP:AMBER requires container encryption for external export"*).
     - **Blocked**: Red error banner indicating enclave policy violation.
   - **`ExportOutcomePage.tsx` (`/export`)**: Status dashboard showing container checksum, encryption parameters, and download trigger.
-- [ ] **External Sharing Dialog (`ShareDialog.tsx`)**:
+- [x] **External Sharing Dialog (`ShareDialog.tsx`)**:
   - Modal form accepting recipient email, mandatory expiration datetime picker, and optional password/PIN. Generates signed external access link (`/share/:token`).
 
 ---
@@ -400,12 +402,12 @@ Implement the security core: TLP 2.0 badge and selector UI, the Export Decision 
 Provide security administration tools for Supervisors and Institution Admins (anomaly detection queue, hash-chained audit trail viewer) and construct the scoped portal for external collaborators.
 
 #### Deliverables
-- [ ] **Anomaly Detection Queue (`src/pages/AlertsQueuePage.tsx` - `/alerts`)**:
+- [x] **Anomaly Detection Queue (`src/pages/AlertsQueuePage.tsx` - `/alerts`)**:
   - Displays risk-scored alerts (mass downloads, off-hour access, off-pattern IP access).
   - Quick actions: `Acknowledge`, `Dismiss`, `Escalate to Admin`.
-- [ ] **Hash-Chained Audit Trail (`src/pages/AuditTrailPage.tsx` - `/audit`)**:
+- [x] **Hash-Chained Audit Trail (`src/pages/AuditTrailPage.tsx` - `/audit`)**:
   - Paginated, filterable compliance table rendering tamper-evident log entries (Timestamp, Actor, Action, Resource, SHA-256 Current Hash, SHA-256 Previous Hash, Verification Status).
-- [ ] **Scoped External Collaborator Portal (`src/pages/ExternalCollaboratorPage.tsx` - `/share/:token`)**:
+- [x] **Scoped External Collaborator Portal (`src/pages/ExternalCollaboratorPage.tsx` - `/share/:token`)**:
   - Isolated single-file viewer displaying file metadata, dynamic expiration countdown timer, and single download button. Completely stripped of main application navigation and reshare capabilities.
 
 ---
@@ -413,16 +415,18 @@ Provide security administration tools for Supervisors and Institution Admins (an
 ### Phase B5: In-App Alerts, Resiliency, Test Automation & Delivery
 
 #### Objective
-Incorporate real-time notification drawers, network resiliency features, automated unit/integration test suites, and conduct final production build verification.
+Incorporate real-time notification drawers, network resiliency features, automated unit/integration test suites, MSW API mock engine, and conduct final production build verification.
 
 #### Deliverables
-- [ ] **In-App Notification Center (`NotificationBell.tsx`)**:
+- [x] **In-App Notification Center (`NotificationBell.tsx`)**:
   - TopBar bell icon displaying unread badge count and slide-over notification history drawer.
-- [ ] **Performance & Resilience Tuning**:
+- [x] **API Client & MSW Mock Engine (`api/client.ts`, `api/hooks.ts`, `mocks/handlers.ts`)**:
+  - Axios REST client, TanStack Query custom hooks, and Mock Service Worker endpoints for zero-backend standalone testing.
+- [x] **Performance & Resilience Tuning**:
   - Export decision latency strictly bounded (<2s UX evaluation time).
   - WebGL 3D Canvas performance budget maintained at 60fps with automatic canvas fallback for low-power GPUs.
   - Responsive design verified across 1280px, 1440px, and 1920px laptop viewports.
-- [ ] **Automated Verification Suite (`frontend/src/__tests__/`)**:
+- [x] **Automated Verification Suite (`frontend/src/__tests__/`)**:
   - **Unit Tests (Vitest)**: `TlpBadge.test.tsx`, `TlpSelector.test.tsx`, `ExportOutcomeBanner.test.tsx`.
   - **Integration Tests**: `AuthFlow.test.tsx`, `ProjectWorkspace.test.tsx`.
   - **Build Verification**: Clean compilation (`tsc -b && vite build`) with zero broken references.
@@ -431,16 +435,16 @@ Incorporate real-time notification drawers, network resiliency features, automat
 
 ## 6. Deliverables Summary Matrix
 
-| Phase | Core Track | Key Deliverables & Code Artifacts | Primary Routes |
-| :--- | :--- | :--- | :--- |
-| **Phase 0** | Shared Base (Done) | `types/index.ts`, `tailwind.config.js`, `vite.config.ts`, Axios client | N/A |
-| **Phase A1** | Track A (Public) | `ShowcaseNavbar.tsx`, `ShowcaseFooter.tsx`, `ShowcaseOverviewPage.tsx`, `EnclaveShieldCanvas.tsx` | `/` (Default Public Landing), `/landing` |
-| **Phase A2** | Track A (Public) | `ShowcaseSecurityPage.tsx`, `ShowcaseWorkflowsPage.tsx`, `ShowcaseAboutPage.tsx`, `ShowcaseDocsPage.tsx` | `/security`, `/workflows`, `/about`, `/docs` |
-| **Phase B1** | Track B (Platform) | `/login` handler (Email/Pass + Keycloak), Admin Link, `Sidebar.tsx`, `TopBar.tsx`, `Shell.tsx` | `/login`, `/home` (Default Main App) |
-| **Phase B2** | Track B (Platform) | `ProjectListPage.tsx`, `ProjectWorkspacePage.tsx`, `UploadDropzone.tsx`, `MemberList.tsx` | `/home`, `/projects/:id` |
-| **Phase B3** | Track B (Platform) | `TlpBadge.tsx`, `TlpSelector.tsx`, `ExportOutcomeBanner.tsx`, `ShareDialog.tsx`, `ExportOutcomePage.tsx` | `/projects/:id/files/:fileId`, `/export` |
-| **Phase B4** | Track B (Platform) | `AlertsQueuePage.tsx`, `AuditTrailPage.tsx`, `ExternalCollaboratorPage.tsx` | `/alerts`, `/audit`, `/share/:token` |
-| **Phase B5** | Track B (Platform) | `NotificationBell.tsx`, `OfflineBanner.tsx`, Vitest test suite | All Routes |
+| Phase | Core Track | Key Deliverables & Code Artifacts | Primary Routes | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Phase 0** | Shared Base | `types/index.ts`, `tailwind.config.js`, `vite.config.ts`, Axios client | N/A | **[Done]** |
+| **Phase A1** | Track A (Public) | `ShowcaseNavbar.tsx`, `ShowcaseFooter.tsx`, `ShowcaseOverviewPage.tsx`, `EnclaveShieldCanvas.tsx` | `/` (Default Public Landing), `/landing` | **[Done]** |
+| **Phase A2** | Track A (Public) | `ShowcaseSecurityPage.tsx`, `ShowcaseWorkflowsPage.tsx`, `ShowcaseAboutPage.tsx`, `ShowcaseSevrPage.tsx`, `ShowcaseDocsPage.tsx` | `/security`, `/workflows`, `/about`, `/sevr`, `/docs` | **[Done]** |
+| **Phase B1** | Track B (Platform) | `/login` handler (Email/Pass + Keycloak), Admin Link, `Sidebar.tsx`, `TopBar.tsx`, `Shell.tsx` | `/login`, `/home` (Default Main App) | **[Done]** |
+| **Phase B2** | Track B (Platform) | `ProjectWorkspace.tsx`, `UploadPage.tsx`, `UploadDropzone.tsx`, `MemberList.tsx` | `/home`, `/projects/:id` | **[Done]** |
+| **Phase B3** | Track B (Platform) | `TlpBadge.tsx`, `TlpSelector.tsx`, `ExportOutcomeBanner.tsx`, `ShareDialog.tsx`, `ExportSharePage.tsx` | `/projects/:id/files/:fileId`, `/export` | **[Done]** |
+| **Phase B4** | Track B (Platform) | `DetectionAlertsPage.tsx`, `AlertList.tsx`, `AlertCard.tsx`, `AuditTrailPage.tsx`, `AuditEntryRow.tsx` | `/alerts`, `/audit`, `/share/:token` | **[Done]** |
+| **Phase B5** | Track B (Platform) | `TopBar.tsx`, `api/hooks.ts`, `mocks/handlers.ts`, Vitest build verification | All Routes | **[Done]** |
 
 ---
 
