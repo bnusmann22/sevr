@@ -4,12 +4,8 @@ import ShowcaseFooter from "../../components/showcase/ShowcaseFooter";
 import {
   BookOpen,
   Shield,
-  Lock,
-  Code2,
-  FileText,
   CheckCircle2,
   Server,
-  ExternalLink,
   Terminal,
 } from "lucide-react";
 

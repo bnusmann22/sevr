@@ -124,7 +124,7 @@ export default function ShowcaseSecurityPage() {
         </section>
 
         {/* Interactive TLP 2.0 Spectrum Visualizer */}
-        <section className="p-8 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-8 backdrop-blur-md">
+        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-8 backdrop-blur-md">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-6">
             <div>
               <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400">
@@ -149,7 +149,7 @@ export default function ShowcaseSecurityPage() {
                   onClick={() => setSelectedTlp(level)}
                   className={`p-3 rounded-xl border text-center font-bold transition-all duration-200 ${
                     active
-                      ? `${tlpDetails[level].bgColor} ${tlpDetails[level].borderColor} ${tlpDetails[level].color} shadow-sm scale-[1.02] ring-1 ring-zinc-700`
+                      ? `${tlpDetails[level].bgColor} ${tlpDetails[level].borderColor} ${tlpDetails[level].color} scale-[1.02] ring-1 ring-zinc-700`
                       : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200"
                   }`}
                 >
@@ -161,7 +161,7 @@ export default function ShowcaseSecurityPage() {
 
           {/* Dynamic Policy Outcome Visualizer Surface */}
           <div
-            className={`p-6 rounded-2xl border transition-all duration-300 ${currentTlpInfo.bgColor} ${currentTlpInfo.borderColor} space-y-6`}
+            className={`p-5 sm:p-6 rounded-2xl border transition-all duration-300 ${currentTlpInfo.bgColor} ${currentTlpInfo.borderColor} space-y-6`}
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
               <div className="space-y-1">
@@ -174,7 +174,7 @@ export default function ShowcaseSecurityPage() {
               </div>
 
               {/* Outcome Badge */}
-              <div className="p-3 rounded-xl bg-[#0d0e14] border border-zinc-800 text-right space-y-1">
+              <div className="p-3 rounded-xl bg-[#0d0e14] border border-zinc-800 text-left sm:text-right space-y-1">
                 <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider block">
                   Export Decision Outcome
                 </span>
@@ -196,7 +196,7 @@ export default function ShowcaseSecurityPage() {
         </section>
 
         {/* Native to .sevr Encrypted Container Transformation Diagram */}
-        <section className="p-8 rounded-3xl bg-zinc-900/40 border border-zinc-800 space-y-8">
+        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-zinc-900/40 border border-zinc-800 space-y-8">
           <div className="max-w-2xl space-y-2">
             <span className="text-[11px] font-mono text-emerald-400 uppercase tracking-widest">
               Container Encapsulation Engine

@@ -41,7 +41,7 @@ export default function ShowcaseSevrPage() {
         </section>
 
         {/* Visual Binary Envelope Breakdown */}
-        <section className="p-8 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-8 backdrop-blur-md">
+        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-8 backdrop-blur-md">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-6">
             <div>
               <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400">
@@ -138,7 +138,7 @@ export default function ShowcaseSevrPage() {
         </section>
 
         {/* Interactive Binary Container Inspector */}
-        <section className="p-8 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-6">
+        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
             <div>
               <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400">
@@ -150,7 +150,7 @@ export default function ShowcaseSevrPage() {
             </div>
 
             {/* Inspector Mode Buttons */}
-            <div className="flex items-center gap-2 bg-zinc-900 p-1 rounded-xl border border-zinc-800 font-mono text-xs">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-zinc-900 p-1 rounded-xl border border-zinc-800 font-mono text-xs">
               <button
                 onClick={() => setInspectorMode("raw")}
                 className={`px-3 py-1.5 rounded-lg font-semibold transition ${

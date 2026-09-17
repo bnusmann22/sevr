@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Shield, Lock, Activity, Sparkles } from "lucide-react";
@@ -7,8 +7,8 @@ function ParticleSphere({ mouse }: { mouse: React.MutableRefObject<[number, numb
   const pointsRef = useRef<THREE.Points>(null!);
   const particleCount = 1200;
 
-  // Generate particle positions on a sphere
-  const [positions, colors] = useRef(() => {
+  // Generate particle positions on a sphere once on mount
+  const [positions, colors] = useMemo(() => {
     const pos = new Float32Array(particleCount * 3);
     const cols = new Float32Array(particleCount * 3);
     const colorEmerald = new THREE.Color("#10b981");
@@ -34,7 +34,7 @@ function ParticleSphere({ mouse }: { mouse: React.MutableRefObject<[number, numb
       cols[i * 3 + 2] = c.b;
     }
     return [pos, cols];
-  }).current();
+  }, []);
 
   useFrame(({ clock }) => {
     if (!pointsRef.current) return;
