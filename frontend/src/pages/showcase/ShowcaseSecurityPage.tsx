@@ -103,38 +103,38 @@ export default function ShowcaseSecurityPage() {
   const currentTlpInfo = tlpDetails[selectedTlp];
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 selection:text-zinc-100">
+    <div className="min-h-screen bg-slate-100 text-slate-800 md:bg-[#090a0f] md:text-zinc-100 flex flex-col font-sans selection:bg-slate-200 selection:text-slate-900 md:selection:bg-zinc-800 md:selection:text-zinc-100">
       <ShowcaseNavbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-16">
         {/* Header */}
         <section className="text-center max-w-3xl mx-auto space-y-4">
-          <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-400 bg-zinc-900 px-3 py-1.5 rounded-full border border-zinc-800">
-            <Lock className="w-4 h-4 text-emerald-400" />
+          <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-700 bg-slate-200 border-slate-300 md:text-emerald-400 md:bg-zinc-900 md:border-zinc-800 px-3 py-1.5 rounded-full border">
+            <Lock className="w-4 h-4 text-emerald-700 md:text-emerald-400" />
             <span>NIST SP 800-171 &amp; FIRST TLP 2.0 Compliance</span>
           </div>
 
-          <h1 className="text-4xl font-extrabold text-white tracking-tight sm:text-5xl">
+          <h1 className="text-4xl font-extrabold text-slate-900 md:text-white tracking-tight sm:text-5xl">
             Security Architecture &amp; Policy Controls
           </h1>
 
-          <p className="text-zinc-400 text-sm sm:text-base leading-relaxed">
-            SeVR 1.0 combines fine-grained Attribute-Based Access Control (ABAC), FIRST TLP 2.0 sensitivity categorization, automated <code className="text-emerald-400 font-mono text-xs">.sevr</code> container transformation, and cryptographic hash chains.
+          <p className="text-slate-600 md:text-zinc-400 text-sm sm:text-base leading-relaxed">
+            SeVR 1.0 combines fine-grained Attribute-Based Access Control (ABAC), FIRST TLP 2.0 sensitivity categorization, automated <code className="text-emerald-700 md:text-emerald-400 font-mono text-xs">.sevr</code> container transformation, and cryptographic hash chains.
           </p>
         </section>
 
         {/* Interactive TLP 2.0 Spectrum Visualizer */}
-        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-8 backdrop-blur-md">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-zinc-800 pb-6">
+        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-white border-slate-300 md:bg-zinc-900/60 md:border-zinc-800 border space-y-8 backdrop-blur-md">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 md:border-zinc-800 pb-6">
             <div>
-              <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-700 md:text-emerald-400">
                 Interactive Security Simulator
               </span>
-              <h2 className="text-2xl font-bold text-white tracking-tight mt-1">
+              <h2 className="text-2xl font-bold text-slate-900 md:text-white tracking-tight mt-1">
                 FIRST TLP 2.0 Spectrum Engine
               </h2>
             </div>
-            <p className="text-xs text-zinc-400 max-w-md">
+            <p className="text-xs text-slate-600 md:text-zinc-400 max-w-md">
               Click any TLP level to simulate how the SeVR Export Engine dynamically evaluates policy rules and determines container outcomes.
             </p>
           </div>
@@ -196,15 +196,15 @@ export default function ShowcaseSecurityPage() {
         </section>
 
         {/* Native to .sevr Encrypted Container Transformation Diagram */}
-        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-zinc-900/40 border border-zinc-800 space-y-8">
+        <section className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-white border-slate-300 md:bg-zinc-900/40 md:border-zinc-800 border space-y-8">
           <div className="max-w-2xl space-y-2">
-            <span className="text-[11px] font-mono text-emerald-400 uppercase tracking-widest">
+            <span className="text-[11px] font-mono text-emerald-700 md:text-emerald-400 uppercase tracking-widest font-semibold">
               Container Encapsulation Engine
             </span>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              Native File to <code className="text-emerald-400 font-mono">.sevr</code> Container Pipeline
+            <h2 className="text-2xl font-bold text-slate-900 md:text-white tracking-tight">
+              Native File to <code className="text-emerald-700 md:text-emerald-400 font-mono">.sevr</code> Container Pipeline
             </h2>
-            <p className="text-xs text-zinc-400">
+            <p className="text-xs text-slate-600 md:text-zinc-400">
               Step-by-step visual demonstration of raw academic research files being packaged into tamper-evident encrypted containers.
             </p>
           </div>
@@ -216,22 +216,22 @@ export default function ShowcaseSecurityPage() {
               onClick={() => setStep(1)}
               className={`p-6 rounded-2xl border cursor-pointer transition-all ${
                 step === 1
-                  ? "bg-zinc-900 border-emerald-500 shadow-md"
-                  : "bg-[#0d0e14] border-zinc-800 opacity-70 hover:opacity-100"
+                  ? "bg-slate-100 border-emerald-600 md:bg-zinc-900 md:border-emerald-500 shadow-md"
+                  : "bg-white border-slate-300 md:bg-[#0d0e14] md:border-zinc-800 opacity-80 hover:opacity-100"
               }`}
             >
               <div className="flex items-center justify-between mb-4">
-                <span className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 font-mono text-xs font-bold text-emerald-400 flex items-center justify-center">
+                <span className="w-8 h-8 rounded-lg bg-slate-200 border-slate-300 text-emerald-800 md:bg-zinc-800 md:border-zinc-700 md:text-emerald-400 border font-mono text-xs font-bold flex items-center justify-center">
                   01
                 </span>
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">Input Payload</span>
+                <span className="text-[10px] font-mono text-slate-500 md:text-zinc-500 uppercase font-semibold">Input Payload</span>
               </div>
-              <h3 className="font-bold text-sm text-white mb-1">Raw Academic File</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+              <h3 className="font-bold text-sm text-slate-900 md:text-white mb-1">Raw Academic File</h3>
+              <p className="text-xs text-slate-600 md:text-zinc-400 leading-relaxed font-sans">
                 Research dataset, PDF paper, or genomic sequence file uploaded by researcher.
               </p>
-              <div className="mt-4 p-2 bg-[#090a0f] rounded font-mono text-[11px] text-zinc-300 border border-zinc-800 flex items-center gap-2">
-                <FileCheck className="w-4 h-4 text-emerald-400" />
+              <div className="mt-4 p-2 bg-slate-200/80 text-slate-800 border-slate-300 md:bg-[#090a0f] md:text-zinc-300 md:border-zinc-800 border rounded font-mono text-[11px] flex items-center gap-2">
+                <FileCheck className="w-4 h-4 text-emerald-700 md:text-emerald-400" />
                 <span>genome_sample_A1.csv</span>
               </div>
             </div>
@@ -241,22 +241,22 @@ export default function ShowcaseSecurityPage() {
               onClick={() => setStep(2)}
               className={`p-6 rounded-2xl border cursor-pointer transition-all ${
                 step === 2
-                  ? "bg-zinc-900 border-amber-500 shadow-md"
-                  : "bg-[#0d0e14] border-zinc-800 opacity-70 hover:opacity-100"
+                  ? "bg-slate-100 border-amber-600 md:bg-zinc-900 md:border-amber-500 shadow-md"
+                  : "bg-white border-slate-300 md:bg-[#0d0e14] md:border-zinc-800 opacity-80 hover:opacity-100"
               }`}
             >
               <div className="flex items-center justify-between mb-4">
-                <span className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 font-mono text-xs font-bold text-amber-400 flex items-center justify-center">
+                <span className="w-8 h-8 rounded-lg bg-slate-200 border-slate-300 text-amber-800 md:bg-zinc-800 md:border-zinc-700 md:text-amber-400 border font-mono text-xs font-bold flex items-center justify-center">
                   02
                 </span>
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">Policy Evaluation</span>
+                <span className="text-[10px] font-mono text-slate-500 md:text-zinc-500 uppercase font-semibold">Policy Evaluation</span>
               </div>
-              <h3 className="font-bold text-sm text-white mb-1">TLP 2.0 &amp; ABAC Check</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+              <h3 className="font-bold text-sm text-slate-900 md:text-white mb-1">TLP 2.0 &amp; ABAC Check</h3>
+              <p className="text-xs text-slate-600 md:text-zinc-400 leading-relaxed font-sans">
                 Export Decision Engine inspects user role, department, recipient target, and TLP label.
               </p>
-              <div className="mt-4 p-2 bg-[#090a0f] rounded font-mono text-[11px] text-amber-400 border border-amber-900/60 flex items-center gap-2">
-                <Lock className="w-4 h-4 text-amber-400" />
+              <div className="mt-4 p-2 bg-slate-200/80 text-amber-800 border-slate-300 md:bg-[#090a0f] md:text-amber-400 md:border-amber-900/60 border rounded font-mono text-[11px] flex items-center gap-2">
+                <Lock className="w-4 h-4 text-amber-700 md:text-amber-400" />
                 <span>EVAL: FORCED CONTAINER</span>
               </div>
             </div>
@@ -266,22 +266,22 @@ export default function ShowcaseSecurityPage() {
               onClick={() => setStep(3)}
               className={`p-6 rounded-2xl border cursor-pointer transition-all ${
                 step === 3
-                  ? "bg-zinc-900 border-cyan-500 shadow-md"
-                  : "bg-[#0d0e14] border-zinc-800 opacity-70 hover:opacity-100"
+                  ? "bg-slate-100 border-cyan-600 md:bg-zinc-900 md:border-cyan-500 shadow-md"
+                  : "bg-white border-slate-300 md:bg-[#0d0e14] md:border-zinc-800 opacity-80 hover:opacity-100"
               }`}
             >
               <div className="flex items-center justify-between mb-4">
-                <span className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 font-mono text-xs font-bold text-cyan-400 flex items-center justify-center">
+                <span className="w-8 h-8 rounded-lg bg-slate-200 border-slate-300 text-cyan-800 md:bg-zinc-800 md:border-zinc-700 md:text-cyan-400 border font-mono text-xs font-bold flex items-center justify-center">
                   03
                 </span>
-                <span className="text-[10px] font-mono text-zinc-500 uppercase">Encrypted Wrapper</span>
+                <span className="text-[10px] font-mono text-slate-500 md:text-zinc-500 uppercase font-semibold">Encrypted Wrapper</span>
               </div>
-              <h3 className="font-bold text-sm text-white mb-1">.sevr Container Release</h3>
-              <p className="text-xs text-zinc-400 leading-relaxed font-sans">
+              <h3 className="font-bold text-sm text-slate-900 md:text-white mb-1">.sevr Container Release</h3>
+              <p className="text-xs text-slate-600 md:text-zinc-400 leading-relaxed font-sans">
                 AES-256 GCM encrypted file wrapped with cryptographic provenance header and expiration lease.
               </p>
-              <div className="mt-4 p-2 bg-[#090a0f] rounded font-mono text-[11px] text-cyan-400 border border-cyan-900/60 flex items-center gap-2">
-                <Layers className="w-4 h-4 text-cyan-400" />
+              <div className="mt-4 p-2 bg-slate-200/80 text-cyan-800 border-slate-300 md:bg-[#090a0f] md:text-cyan-400 md:border-cyan-900/60 border rounded font-mono text-[11px] flex items-center gap-2">
+                <Layers className="w-4 h-4 text-cyan-700 md:text-cyan-400" />
                 <span>genome_sample_A1.sevr</span>
               </div>
             </div>
@@ -289,20 +289,20 @@ export default function ShowcaseSecurityPage() {
         </section>
 
         {/* 2D SVG Cryptographic Hash Chain Audit Timeline */}
-        <section id="hash-chain" className="p-8 rounded-3xl bg-zinc-900/60 border border-zinc-800 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-800 pb-4">
+        <section id="hash-chain" className="p-5 sm:p-8 rounded-2xl sm:rounded-3xl bg-white border-slate-300 md:bg-zinc-900/60 md:border-zinc-800 border space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 md:border-zinc-800 pb-4">
             <div>
-              <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-400">
+              <span className="text-[11px] font-mono uppercase tracking-widest text-emerald-700 md:text-emerald-400 font-semibold">
                 Immutable Integrity Audit
               </span>
-              <h2 className="text-2xl font-bold text-white tracking-tight mt-1">
+              <h2 className="text-2xl font-bold text-slate-900 md:text-white tracking-tight mt-1">
                 2D Cryptographic SHA-256 Hash Chain Visualizer
               </h2>
             </div>
 
             <button
               onClick={() => setHashSimulated(!hashSimulated)}
-              className="px-3.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-xs font-mono text-emerald-400 rounded-lg border border-zinc-800 transition flex items-center gap-2 self-start"
+              className="px-3.5 py-1.5 bg-slate-200 text-slate-800 border-slate-300 hover:bg-slate-300 md:bg-zinc-900 md:text-emerald-400 md:border-zinc-800 md:hover:bg-zinc-800 text-xs font-mono rounded-lg border transition flex items-center gap-2 self-start font-semibold"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${hashSimulated ? "" : "animate-spin"}`} />
               <span>Simulate Block Verification</span>
