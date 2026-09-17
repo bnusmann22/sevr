@@ -1,29 +1,62 @@
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Shell from "./components/layout/Shell";
+import ShowcaseOverviewPage from "./pages/showcase/ShowcaseOverviewPage";
+import ShowcaseSecurityPage from "./pages/showcase/ShowcaseSecurityPage";
+import ShowcaseWorkflowsPage from "./pages/showcase/ShowcaseWorkflowsPage";
+import ShowcaseSevrPage from "./pages/showcase/ShowcaseSevrPage";
+import ShowcaseDocsPage from "./pages/showcase/ShowcaseDocsPage";
+import LoginPage from "./pages/LoginPage";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
 import UploadPage from "./pages/UploadPage";
 import ExportSharePage from "./pages/ExportSharePage";
 import AuditTrailPage from "./pages/AuditTrailPage";
+import DetectionAlertsPage from "./pages/DetectionAlertsPage";
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-neutral-50 text-neutral-900">
-        <nav className="border-b border-neutral-200 px-6 py-4 flex gap-6 text-sm font-medium">
-          <span className="font-semibold tracking-tight">SeVR</span>
-          <Link to="/">Workspace</Link>
-          <Link to="/upload">Upload</Link>
-          <Link to="/export">Export &amp; Share</Link>
-          <Link to="/audit">Audit Trail</Link>
-        </nav>
-        <main className="p-6">
-          <Routes>
-            <Route path="/" element={<ProjectWorkspace />} />
-            <Route path="/upload" element={<UploadPage />} />
-            <Route path="/export" element={<ExportSharePage />} />
-            <Route path="/audit" element={<AuditTrailPage />} />
-          </Routes>
-        </main>
-      </div>
+      <Routes>
+        {/* Track A: Public Showcase Website & Educational Portal */}
+        <Route path="/" element={<ShowcaseOverviewPage />} />
+        <Route path="/landing" element={<ShowcaseOverviewPage />} />
+        
+        <Route path="/security" element={<ShowcaseSecurityPage />} />
+        <Route path="/landing/security" element={<ShowcaseSecurityPage />} />
+
+        <Route path="/workflows" element={<ShowcaseWorkflowsPage />} />
+        <Route path="/landing/workflows" element={<ShowcaseWorkflowsPage />} />
+
+        <Route path="/sevr" element={<ShowcaseSevrPage />} />
+        <Route path="/landing/sevr" element={<ShowcaseSevrPage />} />
+
+        <Route path="/docs" element={<ShowcaseDocsPage />} />
+        <Route path="/landing/docs" element={<ShowcaseDocsPage />} />
+        <Route path="/privacy" element={<ShowcaseDocsPage />} />
+        <Route path="/terms" element={<ShowcaseDocsPage />} />
+
+        {/* Auth Gateway Boundary */}
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* Track B: Core Operational Platform (Authenticated Enclave Shell) */}
+        <Route
+          path="/*"
+          element={
+            <Shell>
+              <Routes>
+                <Route path="/home" element={<ProjectWorkspace />} />
+                <Route path="/app/projects" element={<ProjectWorkspace />} />
+                <Route path="/projects" element={<ProjectWorkspace />} />
+                <Route path="/upload" element={<UploadPage />} />
+                <Route path="/export" element={<ExportSharePage />} />
+                <Route path="/audit" element={<AuditTrailPage />} />
+                <Route path="/app/audit" element={<AuditTrailPage />} />
+                <Route path="/alerts" element={<DetectionAlertsPage />} />
+                <Route path="/app/alerts" element={<DetectionAlertsPage />} />
+              </Routes>
+            </Shell>
+          }
+        />
+      </Routes>
     </BrowserRouter>
   );
 }
