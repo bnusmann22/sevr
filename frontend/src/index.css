@@ -1,3 +1,27 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@keyframes sevr-scan {
+	from { transform: translateY(-1px); opacity: 0; }
+	15% { opacity: 1; }
+	85% { opacity: 1; }
+	to { transform: translateY(27rem); opacity: 0; }
+}
+
+.loading-grid {
+	background-image: linear-gradient(rgba(153, 246, 228, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(153, 246, 228, 0.045) 1px, transparent 1px);
+	background-size: 4rem 4rem;
+	mask-image: linear-gradient(to bottom, transparent, black 25%, black 75%, transparent);
+}
+
+.loading-scan {
+	animation: sevr-scan 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.loading-scan {
+		animation: none;
+		opacity: 0.7;
+	}
+}

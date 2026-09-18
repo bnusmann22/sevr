@@ -10,7 +10,7 @@ export interface DetectionAlertItem {
   createdAt: string;
 }
 
-export default function AlertCard({ alert }: { alert: DetectionAlertItem }) {
+export default function AlertCard({ alert, onStatusChange }: { alert: DetectionAlertItem; onStatusChange: (id: string, status: DetectionAlertItem["status"]) => void }) {
   return (
     <div className="border border-slate-200 rounded-xl p-4 bg-white shadow-xs hover:shadow-md transition flex flex-col justify-between gap-3">
       <div className="flex justify-between items-start">
@@ -40,14 +40,15 @@ export default function AlertCard({ alert }: { alert: DetectionAlertItem }) {
           {alert.createdAt}
         </span>
         <div className="flex gap-2">
-          <button className="px-2.5 py-1 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition flex items-center gap-1 text-xs">
+          <button type="button" onClick={() => onStatusChange(alert.id, "acknowledged")} className="px-2.5 py-1 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 transition flex items-center gap-1 text-xs">
             <Check className="w-3.5 h-3.5 text-slate-500" />
             Acknowledge
           </button>
-          <button className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-medium hover:bg-rose-700 transition flex items-center gap-1 text-xs shadow-xs">
+          <button type="button" onClick={() => onStatusChange(alert.id, "escalated")} className="px-2.5 py-1 rounded-lg bg-rose-600 text-white font-medium hover:bg-rose-700 transition flex items-center gap-1 text-xs shadow-xs">
             <ShieldAlert className="w-3.5 h-3.5" />
             Escalate
           </button>
+          <button type="button" onClick={() => onStatusChange(alert.id, "dismissed")} className="px-2.5 py-1 text-xs text-slate-500 hover:text-slate-900">Dismiss</button>
         </div>
       </div>
     </div>

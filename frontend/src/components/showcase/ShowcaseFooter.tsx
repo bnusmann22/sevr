@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Shield, Lock, ExternalLink, Mail, Award, CheckCircle2 } from "lucide-react";
+import { Lock, ExternalLink, Mail, Award, CheckCircle2 } from "lucide-react";
+import Logo from "../layout/Logo";
 
 export default function ShowcaseFooter() {
   return (
@@ -8,15 +9,13 @@ export default function ShowcaseFooter() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-12">
           {/* Brand & Mission */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-slate-100 border-slate-300 text-emerald-700 md:bg-zinc-900 md:border-zinc-700/80 md:text-emerald-400 border flex items-center justify-center">
-                <Shield className="w-4 h-4 text-emerald-700 md:text-emerald-400" />
-              </div>
-              <div>
-                <span className="font-extrabold text-slate-900 md:text-white text-base tracking-tight">SeVR 1.0</span>
-                <p className="text-[10px] font-mono text-slate-600 md:text-zinc-400">Scoped Enclave for Varsity Research</p>
-              </div>
-            </div>
+            <Logo
+              size="lg"
+              showSubtitle
+              markClassName="bg-slate-100 border border-slate-300 text-emerald-700 md:bg-zinc-900 md:border-zinc-700/80 md:text-emerald-400"
+              nameClassName="text-slate-900 md:text-white"
+              subtitleClassName="text-slate-600 md:text-zinc-400"
+            />
 
             <p className="text-slate-600 md:text-zinc-400 text-xs leading-relaxed max-w-md">
               Sovereign academic research enclave platform engineered for zero-trust data protection, FIRST TLP 2.0 policy enforcement, automated forced <code className="text-slate-800 bg-slate-100 border-slate-300 md:text-emerald-400 md:bg-emerald-950/40 md:border-emerald-800/40 font-mono text-[11px] px-1 py-0.5 rounded border">.sevr</code> container encryption, and immutable hash-chained audit logging.

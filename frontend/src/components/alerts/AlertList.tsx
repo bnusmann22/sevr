@@ -1,7 +1,7 @@
 import AlertCard, { DetectionAlertItem } from "./AlertCard";
 import { ShieldCheck } from "lucide-react";
 
-export default function AlertList({ alerts }: { alerts: DetectionAlertItem[] }) {
+export default function AlertList({ alerts, onStatusChange }: { alerts: DetectionAlertItem[]; onStatusChange: (id: string, status: DetectionAlertItem["status"]) => void }) {
   if (!alerts || alerts.length === 0) {
     return (
       <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-slate-500 text-sm">
@@ -15,7 +15,7 @@ export default function AlertList({ alerts }: { alerts: DetectionAlertItem[] }) 
   return (
     <div className="space-y-3">
       {alerts.map((alert) => (
-        <AlertCard key={alert.id} alert={alert} />
+        <AlertCard key={alert.id} alert={alert} onStatusChange={onStatusChange} />
       ))}
     </div>
   );

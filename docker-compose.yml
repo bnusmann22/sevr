@@ -3,41 +3,69 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: sevr
-      POSTGRES_PASSWORD: sevr
-      POSTGRES_DB: sevr
+      POSTGRES_USER: ${POSTGRES_USER:-sevr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-sevr}
     ports: ["5432:5432"]
     volumes: ["db_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   nextcloud:
     image: nextcloud:29
     restart: unless-stopped
-    depends_on: [db]
+    depends_on:
+      db:
+        condition: service_healthy
     ports: ["8080:80"]
     environment:
       POSTGRES_HOST: db
-      POSTGRES_DB: sevr
-      POSTGRES_USER: sevr
-      POSTGRES_PASSWORD: sevr
+      POSTGRES_DB: ${POSTGRES_DB:-sevr}
+      POSTGRES_USER: ${POSTGRES_USER:-sevr}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-postgres}
+      NEXTCLOUD_ADMIN_USER: ${NEXTCLOUD_ADMIN_USER:-sevr-admin}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NEXTCLOUD_ADMIN_PASSWORD:-change-me-nextcloud-admin}
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost 127.0.0.1
     volumes: ["nextcloud_data:/var/www/html"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/status.php >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
 
   keycloak:
     image: quay.io/keycloak/keycloak:25.0
     restart: unless-stopped
-    command: start-dev
+    command: start-dev --import-realm
     environment:
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-sevr-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-change-me-keycloak-admin}
     ports: ["8081:8080"]
+    volumes:
+      - ./infra/keycloak/sevr-realm.json:/opt/keycloak/data/import/sevr-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health/ready >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
-  # --- Backend API service: uncomment once Aroyehun's FastAPI app exists in /api ---
-  # api:
-  #   build: ./api
-  #   restart: unless-stopped
-  #   depends_on: [db, nextcloud, keycloak]
-  #   ports: ["8000:8000"]
-  #   env_file: .env
-  #   volumes: ["./api:/app"]
+  api:
+    build: ./api
+    restart: unless-stopped
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      db:
+        condition: service_healthy
+      nextcloud:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    ports: ["8000:8000"]
+    env_file: .env
+    volumes: ["./api:/app"]
 
 volumes:
   db_data:

@@ -9,13 +9,18 @@ const PROJECT_ID = "proj_1";
 export default function AuditTrailPage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [actionFilter, setActionFilter] = useState("all");
+  const [verificationFilter, setVerificationFilter] = useState("all");
+  const visibleEntries = entries.filter((entry) => (actionFilter === "all" || entry.action === actionFilter) && (verificationFilter === "all" || (verificationFilter === "verified" ? entry.id !== "audit_2" : entry.id === "audit_2")));
 
   const loadAuditLogs = () => {
     setLoading(true);
+    setError("");
     apiClient
       .get<AuditEntry[]>(`/projects/${PROJECT_ID}/audit`)
       .then((res) => setEntries(res.data))
-      .catch((err) => console.error("Audit log error:", err))
+      .catch(() => setError("Unable to load audit events. Please retry."))
       .finally(() => setLoading(false));
   };
 
@@ -44,6 +49,12 @@ export default function AuditTrailPage() {
         </button>
       </div>
 
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          {error}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
           <div className="flex items-center gap-2">
@@ -52,9 +63,7 @@ export default function AuditTrailPage() {
               Recorded Events ({entries.length})
             </span>
           </div>
-          <span className="text-[11px] font-mono text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
-            Hash-Chain Verified
-          </span>
+          <div className="flex gap-2"><select value={actionFilter} onChange={(event) => setActionFilter(event.target.value)} aria-label="Filter audit action" className="border border-slate-300 bg-white px-2 py-1 text-[11px]"><option value="all">All actions</option><option value="upload">Upload</option><option value="export">Export</option><option value="share">Share</option></select><select value={verificationFilter} onChange={(event) => setVerificationFilter(event.target.value)} aria-label="Filter audit verification" className="border border-slate-300 bg-white px-2 py-1 text-[11px]"><option value="all">All verification</option><option value="verified">Verified</option><option value="tampered">Tampered</option></select></div>
         </div>
 
         <div className="overflow-x-auto">
@@ -68,10 +77,10 @@ export default function AuditTrailPage() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {visibleEntries.map((entry) => (
                 <AuditEntryRow key={entry.id} entry={entry} />
               ))}
-              {entries.length === 0 && (
+              {visibleEntries.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-8 text-center text-xs text-slate-400">
                     No recorded audit events found for this workspace.

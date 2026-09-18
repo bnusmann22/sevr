@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
-import type { ExportDecision } from "../types";
+import type { ExportDecision, SevrFile } from "../types";
 import ExportOutcomeBanner from "../components/sharing/ExportOutcomeBanner";
 import ShareDialog from "../components/sharing/ShareDialog";
 import { Share2, Download, FileText } from "lucide-react";
@@ -13,14 +13,18 @@ export default function ExportSharePage() {
   const [decision, setDecision] = useState<ExportDecision | null>(null);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [files, setFiles] = useState<SevrFile[]>([]);
+  useEffect(() => { apiClient.get<SevrFile[]>("/projects/proj_1/files").then((response) => { setFiles(response.data); if (response.data[0]) setSelectedFileId(response.data[0].id); }).catch(() => setError("Unable to load workspace files.")); }, []);
 
   async function requestExport() {
     setLoading(true);
+    setError("");
     try {
       const res = await apiClient.post<ExportDecision>(`/files/${selectedFileId}/export`, { overrideRequested });
       setDecision(res.data);
-    } catch (err) {
-      console.error("Export request failed:", err);
+    } catch {
+      setError("Export evaluation failed. Please verify the file policy and try again.");
     } finally {
       setLoading(false);
     }
@@ -52,8 +56,7 @@ export default function ExportSharePage() {
             }}
             className="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
           >
-            <option value="file_1">draft_manuscript_v3.docx (TLP:AMBER)</option>
-            <option value="file_2">raw_samples_2026.csv (TLP:RED - Mandatory Hard Floor)</option>
+            {files.map((file) => <option key={file.id} value={file.id}>{file.name} (TLP:{file.tlpLabel})</option>)}
           </select>
         </div>
 
@@ -92,6 +95,12 @@ export default function ExportSharePage() {
             Share External Link
           </button>
         </div>
+
+        {error && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            {error}
+          </div>
+        )}
 
         {decision && (
           <div className="pt-2">

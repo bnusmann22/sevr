@@ -26,6 +26,8 @@ const INITIAL_ALERTS: DetectionAlertItem[] = [
 
 export default function DetectionAlertsPage() {
   const [alerts, setAlerts] = useState<DetectionAlertItem[]>(INITIAL_ALERTS);
+  const [filter, setFilter] = useState("all");
+  const visibleAlerts = filter === "all" ? alerts : alerts.filter((alert) => filter === "high" ? alert.riskScore >= 80 : alert.status === filter);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -39,16 +41,16 @@ export default function DetectionAlertsPage() {
             Real-time automated policy violation and threat detection alerts across enclave workspaces.
           </p>
         </div>
-        <button
+        <div className="flex items-center gap-2"><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter alerts" className="border border-slate-300 px-2 py-1.5 text-xs"><option value="all">All alerts</option><option value="open">Open</option><option value="high">High risk</option></select><button
           onClick={() => setAlerts(INITIAL_ALERTS)}
           className="px-3 py-1.5 text-xs font-medium border border-slate-300 hover:bg-slate-50 rounded-lg text-slate-700 flex items-center gap-1.5 transition"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Refresh
-        </button>
+        </button></div>
       </div>
 
-      <AlertList alerts={alerts} />
+      <AlertList alerts={visibleAlerts} onStatusChange={(id, status) => setAlerts((current) => current.map((alert) => alert.id === id ? { ...alert, status } : alert))} />
     </div>
   );
 }

@@ -1,26 +1,26 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertCircle,
   ArrowRight,
   Building2,
   CheckCircle2,
-  ExternalLink,
-  KeyRound,
-  Lock,
-  Mail,
+  Eye,
+  EyeOff,
   Shield,
-  UserRound,
 } from "lucide-react";
 import { apiClient } from "../api/client";
+import Logo from "../components/layout/Logo";
 
 type AuthMode = "login" | "signup";
 type AuthMethod = "credentials" | "sso";
 
-type AuthSession = {
+export type AuthSession = {
   email: string;
   name: string;
   role: "researcher" | "supervisor" | "institution_admin";
+  department?: string;
   token: string;
   authenticatedAt: string;
 };
@@ -78,6 +78,15 @@ export default function LoginPage() {
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSsoLoading, setIsSsoLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const requestedDestination =
+    typeof location.state?.from === "string" && location.state.from.startsWith("/")
+      ? location.state.from
+      : "/home";
 
   const updateField = (field: keyof typeof form, value: string | boolean) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -127,6 +136,7 @@ export default function LoginPage() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const endpoint = mode === "signup" ? "/api/auth/signup" : "/api/auth/login";
       const response = await apiClient.post(endpoint, {
@@ -142,13 +152,14 @@ export default function LoginPage() {
       }
 
       persistAuthSession(session, form.rememberMe);
+      window.dispatchEvent(new CustomEvent("sevr:auth-success"));
       setError("");
       setSuccess(
         mode === "login"
           ? "Credentials verified. Opening your enclave workspace..."
           : "Account created. Welcome to the SeVR enclave...",
       );
-      window.setTimeout(() => navigate("/home"), 600);
+      window.setTimeout(() => navigate(requestedDestination, { replace: true }), 600);
     } catch (error) {
       const message =
         error instanceof Error && error.message
@@ -156,12 +167,15 @@ export default function LoginPage() {
           : "Unable to verify your credentials. Please try again.";
       setError(message);
       setSuccess("");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const handleSsoLogin = async () => {
     setError("");
     setSuccess("Redirecting to the university identity provider...");
+    setIsSsoLoading(true);
 
     try {
       const response = await apiClient.get<{ redirectUrl: string }>('/api/auth/sso/start');
@@ -176,138 +190,171 @@ export default function LoginPage() {
           : "SSO is temporarily unavailable. Please use institutional credentials instead.";
       setError(message);
       setSuccess("");
+    } finally {
+      setIsSsoLoading(false);
     }
   };
 
   const isLogin = mode === "login";
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-8 text-slate-100 flex items-center justify-center">
-      <div className="w-full max-w-md">
-        <div className="rounded-3xl border border-slate-800 bg-white p-6 shadow-2xl shadow-emerald-950/20 text-slate-900">
-          <div className="flex items-center justify-center mb-5">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-emerald-400 shadow-lg shadow-emerald-600/20">
-              <KeyRound className="h-7 w-7" />
+    <main className="min-h-screen bg-[#f4f7f6] text-slate-950 selection:bg-teal-200">
+      <div className="grid min-h-screen lg:grid-cols-[minmax(320px,0.8fr)_minmax(520px,1.2fr)]">
+        <aside className="relative hidden overflow-hidden bg-[#0b2528] p-10 text-[#e9f4ef] lg:flex lg:flex-col lg:justify-between">
+          <div className="absolute -right-28 top-1/2 h-[34rem] w-[34rem] -translate-y-1/2 rounded-full border border-teal-300/10" />
+          <div className="absolute -right-8 top-1/2 h-[22rem] w-[22rem] -translate-y-1/2 rounded-full border border-teal-300/10" />
+          <div className="absolute right-24 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-teal-300 shadow-[0_0_0_10px_rgba(94,234,212,0.08)]" />
+
+          <div className="relative z-10 flex items-center gap-3">
+            <Logo size="md" markClassName="bg-teal-300 text-[#0b2528]" nameClassName="text-[#e9f4ef]" />
+          </div>
+
+          <div className="relative z-10 max-w-sm">
+            <p className="mb-5 text-xs font-medium uppercase tracking-[0.24em] text-teal-200/70">
+              Scoped enclave for varsity research
+            </p>
+            <h2 className="max-w-xs text-4xl font-medium leading-[1.08] tracking-[-0.04em]">
+              Your work,<br />within its boundary.
+            </h2>
+            <p className="mt-6 max-w-xs text-sm leading-6 text-slate-300">
+              A focused workspace for institution-verified research, controlled sharing, and clear
+              data boundaries.
+            </p>
+          </div>
+
+          <div className="relative z-10 flex items-center gap-2 text-xs text-slate-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-teal-300" />
+            Protected by institution identity
+          </div>
+        </aside>
+
+        <section className="flex min-h-screen flex-col px-6 py-7 sm:px-12 lg:px-20">
+          <header className="flex items-center justify-between lg:justify-end">
+            <div className="flex items-center gap-2 lg:hidden">
+              <Logo size="sm" markClassName="bg-[#0b2528] text-teal-300" nameClassName="text-slate-950" />
             </div>
-          </div>
+            <a href={`mailto:${supportEmail}`} className="text-xs font-medium text-slate-500 transition hover:text-slate-900">
+              Help desk <span className="ml-1 text-slate-300">/</span> {supportEmail}
+            </a>
+          </header>
 
-          <div className="mb-6 flex rounded-xl bg-slate-100 p-1">
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                isLogin ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}
+          <div className="mx-auto flex w-full max-w-[30rem] flex-1 items-center py-12">
+            <motion.div
+              className="w-full max-w-[30rem]"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
             >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/signup")}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                !isLogin ? "bg-slate-900 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              Create account
-            </button>
-          </div>
+              <div className="mb-10">
+                <h1 className="text-4xl font-medium tracking-[-0.045em] text-slate-950 sm:text-[2.75rem]">
+                  {isLogin ? "Welcome back." : "Create your account."}
+                </h1>
+                <p className="mt-4 max-w-md text-[0.95rem] leading-6 text-slate-500">
+                  {isLogin
+                    ? "Sign in with your institution credentials to enter the protected workspace."
+                    : "Use your university email to request a place in the protected research enclave."}
+                </p>
+              </div>
 
-          <div className="mb-6 flex items-center gap-2 text-emerald-700">
-            <Shield className="h-4 w-4" />
-            <span className="text-xs font-medium uppercase tracking-[0.2em]">
-              Enclave identity gateway
-            </span>
-          </div>
-
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-            {isLogin ? "Welcome back" : "Create your SeVR account"}
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            {isLogin
-              ? "Access the secure research workspace with your institution credentials or university SSO."
-              : "Register with your university email to join the protected research enclave."}
-          </p>
-
-          <div className="mt-6 mb-5 flex rounded-xl border border-slate-200 bg-slate-50 p-1">
+          <div className="mb-7 flex items-center gap-6 border-b border-slate-200 pb-3">
             <button
               type="button"
               onClick={() => setAuthMethod("credentials")}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                authMethod === "credentials" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+              className={`text-sm font-medium transition ${
+                authMethod === "credentials" ? "text-slate-950" : "text-slate-400 hover:text-slate-700"
               }`}
             >
-              Institution email
+              Email and password
             </button>
             <button
               type="button"
               onClick={() => setAuthMethod("sso")}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                authMethod === "sso" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
+              className={`text-sm font-medium transition ${
+                authMethod === "sso" ? "text-slate-950" : "text-slate-400 hover:text-slate-700"
               }`}
             >
               University SSO
             </button>
           </div>
 
-          {authMethod === "credentials" ? (
-            <form className="space-y-4" onSubmit={handleCredentialsSubmit}>
+          <AnimatePresence mode="wait" initial={false}>
+            {authMethod === "credentials" ? (
+            <motion.form
+              key="credentials"
+              className="space-y-5"
+              onSubmit={handleCredentialsSubmit}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 8 }}
+              transition={{ duration: 0.2 }}
+            >
               {!isLogin && (
                 <label className="block">
-                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                    <UserRound className="h-4 w-4 text-slate-500" />
-                    Full name
-                  </span>
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Full name</span>
                   <input
                     type="text"
                     value={form.fullName}
                     onChange={(event) => updateField("fullName", event.target.value)}
                     placeholder="Dr. Ada Okafor"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                    className="w-full border-0 border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-700"
                   />
                 </label>
               )}
 
               <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <Mail className="h-4 w-4 text-slate-500" />
-                  Institution email
-                </span>
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Institution email</span>
                 <input
                   type="email"
                   value={form.email}
                   onChange={(event) => updateField("email", event.target.value)}
                   placeholder="researcher@bayero.edu.ng"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  className="w-full border-0 border-b border-slate-300 bg-transparent px-0 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-700"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <Lock className="h-4 w-4 text-slate-500" />
-                  Password
-                </span>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => updateField("password", event.target.value)}
-                  placeholder={isLogin ? "Enter your password" : "Create a secure password"}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-                />
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Password</span>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(event) => updateField("password", event.target.value)}
+                    placeholder={isLogin ? "Enter your password" : "Create a secure password"}
+                    className="w-full border-0 border-b border-slate-300 bg-transparent px-0 py-3 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((visible) => !visible)}
+                    className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-slate-400 transition hover:text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </label>
 
               {!isLogin && (
                 <label className="block">
-                  <span className="mb-2 flex items-center gap-2 text-sm font-medium text-slate-700">
-                    <Lock className="h-4 w-4 text-slate-500" />
-                    Confirm password
-                  </span>
-                  <input
-                    type="password"
-                    value={form.confirmPassword}
-                    onChange={(event) => updateField("confirmPassword", event.target.value)}
-                    placeholder="Re-enter your password"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
-                  />
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Confirm password</span>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={form.confirmPassword}
+                      onChange={(event) => updateField("confirmPassword", event.target.value)}
+                      placeholder="Re-enter your password"
+                      className="w-full border-0 border-b border-slate-300 bg-transparent px-0 py-3 pr-10 text-sm text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-teal-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((visible) => !visible)}
+                      className="absolute right-0 top-1/2 -translate-y-1/2 p-2 text-slate-400 transition hover:text-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-600"
+                      aria-label={showConfirmPassword ? "Hide confirmed password" : "Show confirmed password"}
+                      title={showConfirmPassword ? "Hide confirmed password" : "Show confirmed password"}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </label>
               )}
 
@@ -321,20 +368,20 @@ export default function LoginPage() {
                   />
                   Remember this device
                 </label>
-                <Link to="/login" className="font-medium text-emerald-700 hover:text-emerald-800">
+                <Link to="/login" className="font-medium text-teal-700 hover:text-teal-900">
                   {isLogin ? "Need help?" : "Already have access?"}
                 </Link>
               </div>
 
               {error && (
-                <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                <div className="flex items-start gap-2 border-l-2 border-rose-500 bg-rose-50/70 px-3 py-2 text-sm text-rose-700">
                   <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />
                   <span>{error}</span>
                 </div>
               )}
 
               {success && (
-                <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                <div className="flex items-start gap-2 border-l-2 border-teal-600 bg-teal-50/70 px-3 py-2 text-sm text-teal-800">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none" />
                   <span>{success}</span>
                 </div>
@@ -342,17 +389,25 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
+                disabled={isSubmitting}
+                className="flex w-full items-center justify-center gap-2 bg-[#0b2528] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
               >
-                {isLogin ? "Sign in to enclave" : "Create account & continue"}
+                {isSubmitting ? "Verifying access..." : isLogin ? "Sign in to enclave" : "Create account & continue"}
                 <ArrowRight className="h-4 w-4" />
               </button>
-            </form>
+            </motion.form>
           ) : (
-            <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                <div className="mb-2 flex items-center gap-2 font-semibold text-slate-800">
-                  <Building2 className="h-4 w-4 text-emerald-600" />
+            <motion.div
+              key="sso"
+              className="space-y-5"
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="border border-slate-200 bg-white/60 p-5 text-sm text-slate-600">
+                <div className="mb-3 flex items-center gap-2 font-semibold text-slate-900">
+                  <Building2 className="h-4 w-4 text-teal-700" />
                   University single sign-on
                 </div>
                 <p>
@@ -362,7 +417,7 @@ export default function LoginPage() {
               </div>
 
               {success && (
-                <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                <div className="flex items-start gap-2 border-l-2 border-teal-600 bg-teal-50/70 px-3 py-2 text-sm text-teal-800">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none" />
                   <span>{success}</span>
                 </div>
@@ -371,42 +426,30 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={handleSsoLogin}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                disabled={isSsoLoading}
+                className="flex w-full items-center justify-center gap-2 bg-[#0b2528] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
               >
-                Continue with Keycloak SSO
+                {isSsoLoading ? "Connecting to identity provider..." : "Continue with Keycloak SSO"}
                 <ArrowRight className="h-4 w-4" />
               </button>
-            </div>
+            </motion.div>
           )}
+          </AnimatePresence>
 
-          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-left">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Need help?
+          <div className="mt-10 flex items-start gap-3 border-t border-slate-200 pt-5 text-xs leading-5 text-slate-500">
+            <Shield className="mt-0.5 h-4 w-4 flex-none text-teal-700" />
+            <p>
+              Your identity is checked against your institution. Need access?{" "}
+              <a href={supportLink} target="_blank" rel="noreferrer" className="font-semibold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:decoration-teal-600">
+                Contact the enclave admin
+              </a>.
             </p>
-            <p className="mt-2 text-sm text-slate-600">
-              Contact the enclave admin for access requests, institutional onboarding, or triage if
-              your university email is not yet linked to your research account.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <a
-                href={`mailto:${supportEmail}`}
-                className="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 hover:text-emerald-800"
-              >
-                {supportEmail}
-              </a>
-              <a
-                href={supportLink}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-sm font-medium text-slate-700 hover:text-slate-900"
-              >
-                Request access
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </div>
           </div>
-        </div>
+            </motion.div>
+          </div>
+          <footer className="text-xs text-slate-400">SeVR / secure research infrastructure</footer>
+        </section>
       </div>
-    </div>
+    </main>
   );
 }

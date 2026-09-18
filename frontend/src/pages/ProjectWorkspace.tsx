@@ -1,28 +1,39 @@
 import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { apiClient } from "../api/client";
 import FileList from "../components/files/FileList";
 import UploadDropzone from "../components/files/UploadDropzone";
 import type { SevrFile } from "../types";
 import { Folder, FileText, RefreshCw } from "lucide-react";
+import ProjectTabs from "../components/projects/ProjectTabs";
+import ActivityFeed from "../components/activity/ActivityFeed";
+import MemberList from "../components/projects/MemberList";
+import ProjectSettings from "../components/projects/ProjectSettings";
 
 const PROJECT_ID = "proj_1";
 
 export default function ProjectWorkspace() {
+  const { projectId = PROJECT_ID } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const selectedTab = new URLSearchParams(location.search).get("tab") ?? "files";
   const [files, setFiles] = useState<SevrFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const loadFiles = () => {
     setLoading(true);
+    setError("");
     apiClient
-      .get<SevrFile[]>(`/projects/${PROJECT_ID}/files`)
+      .get<SevrFile[]>(`/projects/${projectId}/files`)
       .then((res) => setFiles(res.data))
-      .catch((err) => console.error("Error loading files:", err))
+      .catch(() => setError("Unable to load workspace files. Please try again."))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     loadFiles();
-  }, []);
+  }, [projectId]);
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -33,7 +44,7 @@ export default function ProjectWorkspace() {
             Rural Groundwater Contamination Study
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Active Project Enclave Workspace · ID: <span className="font-mono">{PROJECT_ID}</span>
+            Active Project Enclave Workspace · ID: <span className="font-mono">{projectId}</span>
           </p>
         </div>
         <button
@@ -45,9 +56,19 @@ export default function ProjectWorkspace() {
         </button>
       </div>
 
-      <UploadDropzone />
+      <ProjectTabs projectId={projectId} />
+      {selectedTab === "activity" && <ActivityFeed />}
+      {selectedTab === "members" && <MemberList />}
+      {selectedTab === "settings" && <ProjectSettings />}
+      {selectedTab === "files" && <UploadDropzone onFileSelected={() => navigate("/upload")} />}
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+      {error && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          {error}
+        </div>
+      )}
+
+      {selectedTab === "files" && <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
         <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
           <h2 className="font-bold text-sm text-slate-900 flex items-center gap-2">
             <FileText className="w-4 h-4 text-slate-500" />
@@ -58,7 +79,7 @@ export default function ProjectWorkspace() {
           </span>
         </div>
         <FileList files={files} />
-      </div>
+      </div>}
     </div>
   );
 }

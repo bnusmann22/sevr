@@ -7,6 +7,7 @@ import { Upload, Shield, Info, CheckCircle } from "lucide-react";
 export default function UploadPage() {
   const [label, setLabel] = useState<TLPLabel>("AMBER");
   const [isUploaded, setIsUploaded] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -20,7 +21,7 @@ export default function UploadPage() {
         </p>
       </div>
 
-      <UploadDropzone />
+      <UploadDropzone onFileSelected={setSelectedFile} />
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
         <div>
@@ -41,6 +42,7 @@ export default function UploadPage() {
         <div className="pt-2 flex justify-end">
           <button
             onClick={() => setIsUploaded(true)}
+            disabled={!selectedFile}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition flex items-center gap-2 shadow-sm"
           >
             <CheckCircle className="w-4 h-4" />

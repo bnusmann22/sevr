@@ -9,4 +9,20 @@ export const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+apiClient.interceptors.request.use((config) => {
+  window.dispatchEvent(new CustomEvent("sevr:request-start"));
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => {
+    window.dispatchEvent(new CustomEvent("sevr:request-end"));
+    return response;
+  },
+  (error) => {
+    window.dispatchEvent(new CustomEvent("sevr:request-end"));
+    return Promise.reject(error);
+  },
+);
+
 export const usingMocks = import.meta.env.VITE_USE_MOCKS === "true";

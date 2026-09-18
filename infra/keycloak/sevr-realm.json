@@ -1,0 +1,50 @@
+{
+  "realm": "sevr",
+  "enabled": true,
+  "displayName": "SeVR Local Realm",
+  "registrationAllowed": false,
+  "sslRequired": "none",
+  "clients": [
+    {
+      "clientId": "sevr-web",
+      "name": "SeVR Web",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:5173/auth/callback"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "sevr-api",
+      "name": "SeVR API",
+      "enabled": true,
+      "bearerOnly": true,
+      "protocol": "openid-connect",
+      "fullScopeAllowed": false,
+      "protocolMappers": [
+        {
+          "name": "audience-sevr-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "sevr-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "researcher" },
+      { "name": "supervisor" },
+      { "name": "institution_admin" }
+    ]
+  }
+}

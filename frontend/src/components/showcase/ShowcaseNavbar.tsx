@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Shield, Lock, Layers, LogIn, Menu, X, BookOpen, FileCheck } from "lucide-react";
+import { Shield, Lock, Workflow, Info, FileText, Layers, LogIn, Menu, X, BookOpen, FileCheck } from "lucide-react";
+import Logo from "../layout/Logo";
 
 export default function ShowcaseNavbar() {
   const location = useLocation();
@@ -9,7 +10,10 @@ export default function ShowcaseNavbar() {
   const navItems = [
     { label: "Overview", path: "/", icon: Shield },
     { label: "Security Architecture", path: "/security", icon: Lock },
+    { label: "Workflows", path: "/workflows", icon: Workflow },
     { label: ".sevr Format", path: "/sevr", icon: Layers },
+    { label: "About", path: "/about", icon: Info },
+    { label: "Docs", path: "/docs", icon: FileText },
   ];
 
   const isActive = (path: string) => {
@@ -24,22 +28,16 @@ export default function ShowcaseNavbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo & Brand Identity */}
         <Link to="/" className="group flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-slate-200 border border-slate-300 md:bg-zinc-900 md:border-zinc-700/80 flex items-center justify-center text-slate-800 md:text-zinc-100 group-hover:border-emerald-600 transition-colors">
-            <Shield className="w-4 h-4 text-emerald-700 md:text-emerald-400" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-base tracking-tight text-slate-900 md:text-white group-hover:text-slate-700 md:group-hover:text-zinc-200 transition-colors">
-                SeVR
-              </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-200 border border-slate-300 text-slate-700 md:bg-zinc-900 md:border-zinc-700 md:text-zinc-300 font-medium">
-                v1.0
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500 md:text-zinc-400 font-mono tracking-wider uppercase hidden sm:block">
-              Scoped Enclave for Varsity Research
-            </p>
-          </div>
+          <Logo
+            size="lg"
+            showSubtitle
+            showVersion
+            className="transition-opacity group-hover:opacity-90"
+            markClassName="bg-slate-200 border border-slate-300 text-emerald-700 md:bg-zinc-900 md:border-zinc-700/80 md:text-emerald-400"
+            nameClassName="text-slate-900 md:text-white"
+            subtitleClassName="text-slate-500 md:text-zinc-400"
+            versionClassName="bg-slate-200 border border-slate-300 text-slate-700 md:bg-zinc-900 md:border-zinc-700 md:text-zinc-300"
+          />
         </Link>
 
         {/* Desktop Navigation Tabs */}

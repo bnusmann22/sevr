@@ -1,7 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
-import { Folder, ShieldAlert, ScrollText, Upload, Share2, Shield } from "lucide-react";
+import { Folder, ShieldAlert, ScrollText, Upload, Share2 } from "lucide-react";
+import Logo from "./Logo";
 
-export default function Sidebar() {
+type SidebarProps = {
+  open: boolean;
+  onClose: () => void;
+};
+
+export default function Sidebar({ open, onClose }: SidebarProps) {
   const location = useLocation();
 
   const navItems = [
@@ -13,16 +19,12 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside className="w-64 bg-slate-900 text-slate-100 min-h-screen p-4 flex flex-col justify-between shrink-0">
+    <>
+      {open && <button type="button" aria-label="Close navigation" onClick={onClose} className="fixed inset-0 z-30 bg-slate-950/50 md:hidden" />}
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 min-h-screen shrink-0 flex-col justify-between bg-slate-900 p-4 text-slate-100 transition-transform md:static md:z-auto md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
       <div>
-        <div className="flex items-center gap-2.5 mb-8 px-2">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-slate-950 font-bold text-sm shadow-md">
-            <Shield className="w-5 h-5 text-slate-950" />
-          </div>
-          <div>
-            <h1 className="font-bold text-sm tracking-tight text-white">SeVR Enclave</h1>
-            <p className="text-[10px] text-slate-400">Varsity Research v1.0</p>
-          </div>
+        <div className="mb-8 px-2">
+          <Logo size="md" showSubtitle showVersion nameClassName="text-white" subtitleClassName="normal-case tracking-normal text-slate-400" />
         </div>
 
         <nav className="space-y-1 text-sm font-medium">
@@ -38,6 +40,7 @@ export default function Sidebar() {
                     ? "bg-slate-800 text-emerald-400 font-semibold"
                     : "text-slate-300 hover:text-white hover:bg-slate-800/60"
                 }`}
+                onClick={onClose}
               >
                 <Icon className={`w-4 h-4 ${isActive ? "text-emerald-400" : "text-slate-400"}`} />
                 {item.label}
@@ -51,6 +54,7 @@ export default function Sidebar() {
         <span>SeVR Secure Enclave</span>
         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

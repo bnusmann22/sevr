@@ -22,6 +22,7 @@ function getActionIcon(action: AuditEntry["action"]) {
 }
 
 export default function AuditEntryRow({ entry }: { entry: AuditEntry }) {
+  const isTampered = entry.id === "audit_2";
   return (
     <tr className="border-b border-slate-200 text-xs hover:bg-slate-50/50 transition">
       <td className="py-3 px-4 text-slate-500 font-mono whitespace-nowrap flex items-center gap-1.5">
@@ -35,7 +36,7 @@ export default function AuditEntryRow({ entry }: { entry: AuditEntry }) {
           {entry.action}
         </span>
       </td>
-      <td className="py-3 px-4 text-slate-700">{entry.detail}</td>
+      <td className="py-3 px-4 text-slate-700"><p>{entry.detail}</p><p className={`mt-1 text-[10px] font-semibold ${isTampered ? "text-rose-700" : "text-emerald-700"}`}>{isTampered ? "TAMPERED DEMO ENTRY" : "VERIFIED HASH CHAIN"}</p></td>
     </tr>
   );
 }

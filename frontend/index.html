@@ -4,9 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SeVR: Scoped Enclave for Varsity Research</title>
+    <style>
+      @keyframes sevr-entry-spin { to { transform: rotate(360deg); } }
+      @keyframes sevr-entry-progress { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+      .entry-loading { min-height: 100vh; display: grid; place-items: center; background: #0b2528; color: #e9f4ef; font: 500 12px/1.5 system-ui, sans-serif; letter-spacing: .24em; text-transform: uppercase; }
+      .entry-loading__content { position: relative; display: grid; justify-items: center; gap: 20px; }
+      .entry-loading__mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; background: #99f6e4; color: #0b2528; font-size: 18px; font-weight: 700; letter-spacing: 0; }
+      .entry-loading__orbit { position: absolute; top: -42px; width: 144px; height: 144px; border: 1px solid rgba(153, 246, 228, .16); border-radius: 50%; animation: sevr-entry-spin 2.8s linear infinite; }
+      .entry-loading__orbit::after { content: ""; position: absolute; inset: 34px; border: 1px solid rgba(153, 246, 228, .2); border-radius: 50%; }
+      .entry-loading__bar { width: 144px; height: 1px; overflow: hidden; background: rgba(153, 246, 228, .12); }
+      .entry-loading__bar::after { content: ""; display: block; width: 50%; height: 100%; background: #99f6e4; animation: sevr-entry-progress 1.2s ease-in-out infinite; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="entry-loading" aria-live="polite" aria-busy="true">
+        <div class="entry-loading__content">
+          <div class="entry-loading__orbit" aria-hidden="true"></div>
+          <div class="entry-loading__mark" aria-hidden="true">S</div>
+          <span>Opening your secure workspace</span>
+          <div class="entry-loading__bar" aria-hidden="true"></div>
+        </div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

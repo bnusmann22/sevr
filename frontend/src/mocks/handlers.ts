@@ -3,6 +3,13 @@ import type { Project, SevrFile, ExportDecision, AuditEntry } from "../types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+const defaultLogin = {
+  email: "researcher@bayero.edu.ng",
+  password: "SeVRdemo2026!",
+  name: "Dr. Ada Okafor",
+  role: "supervisor" as const,
+};
+
 const projects: Project[] = [
   { id: "proj_1", name: "Rural Groundwater Contamination Study", memberCount: 4, createdAt: "2026-06-01T09:00:00Z" },
 ];
@@ -30,6 +37,26 @@ function decideExport(tlp: SevrFile["tlpLabel"], overrideRequested: boolean): Ex
 }
 
 export const handlers = [
+  http.post(`${BASE}/api/auth/login`, async ({ request }) => {
+    const body = (await request.json()) as { email?: string; password?: string };
+    const email = body.email?.trim().toLowerCase();
+
+    if (email !== defaultLogin.email || body.password !== defaultLogin.password) {
+      return HttpResponse.json({ message: "Invalid institution email or password." }, { status: 401 });
+    }
+
+    return HttpResponse.json({
+      session: {
+        email: defaultLogin.email,
+        name: defaultLogin.name,
+        role: defaultLogin.role,
+        department: "Environmental Sciences",
+        token: "mock-session-token",
+        authenticatedAt: new Date().toISOString(),
+      },
+    });
+  }),
+
   http.get(`${BASE}/projects`, () => HttpResponse.json(projects)),
 
   http.get(`${BASE}/projects/:id/files`, ({ params }) =>

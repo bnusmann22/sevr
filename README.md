@@ -5,10 +5,10 @@ See `docs/` for the Project Charter and Product Requirements Document.
 
 ## Current status
 
-Frontend is being built now, against a mocked API (MSW), so UI work isn't
-blocked on the backend. Backend (`api/`) will be built next: data shapes
-the backend must match live in `frontend/src/types/index.ts` and
-`frontend/src/mocks/handlers.ts`.
+Frontend UI work continues against MSW, while the local FastAPI foundation
+and Docker infrastructure are now available. Domain endpoints will be added
+incrementally: data shapes the backend must match live in
+`frontend/src/types/index.ts` and `frontend/src/mocks/handlers.ts`.
 
 ## Quick start: frontend only (what you need right now)
 
@@ -23,16 +23,39 @@ Opens at `http://localhost:5173`. Every screen (workspace, upload,
 export/share, audit trail) works against realistic mock data; no backend
 or Docker required for this.
 
-## Quick start: full stack (once the backend exists)
+### Default mock login
+
+When `VITE_USE_MOCKS=true`, sign in with:
+
+- Email: `researcher@bayero.edu.ng`
+- Password: `SeVRdemo2026!`
+
+This supervisor account exists only in the MSW development handler and is not
+used when the frontend points to a real API.
+
+## Quick start: local full stack
 
 ```bash
 cp .env.example .env
-docker compose up --build   # Nextcloud, Postgres, Keycloak (+ api, once uncommented)
+docker compose up -d --build   # Postgres, Nextcloud, Keycloak, and FastAPI
+sh scripts/create-nextcloud-service-account.sh
+docker compose exec api alembic upgrade head
+curl http://localhost:8000/health/ready
 cd frontend && npm install && npm run dev
 ```
 
 Then in `frontend/.env`, set `VITE_USE_MOCKS=false` and point
 `VITE_API_BASE_URL` at the running API.
+
+The local services are available at:
+
+- FastAPI: `http://localhost:8000`
+- Nextcloud: `http://localhost:8080`
+- Keycloak: `http://localhost:8081`
+- PostgreSQL: `localhost:5432`
+
+See [Implementation.md](Implementation.md) for migration, Keycloak/PKCE,
+Nextcloud credentials, JWT validation, health-check, and secret-rotation procedures.
 
 ## Repo structure
 
@@ -40,11 +63,11 @@ Then in `frontend/.env`, set `VITE_USE_MOCKS=false` and point
 sevr/
 ├── docker-compose.yml
 ├── .env.example
-├── api/            # FastAPI backend (not yet built)
+├── api/            # FastAPI backend and Alembic migrations
 ├── detection/       # leak-detection pipeline (pandas/scikit-learn)
 ├── watermark/        # per-copy watermarking
 ├── sevr_format/      # .sevr container encode/decode
-├── db/              # migrations / schema
+├── db/              # database-related assets
 ├── frontend/         # React + TypeScript + Tailwind + MSW mocks
 └── docs/            # Project Charter, PRD
 ```
