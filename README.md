@@ -35,6 +35,21 @@ used when the frontend points to a real API.
 
 ## Quick start: local full stack
 
+On Windows PowerShell, the Phase 0 bootstrap command starts Docker Desktop when
+needed, validates Compose, builds the API, and starts PostgreSQL, Nextcloud,
+Keycloak, and FastAPI:
+
+```powershell
+.\scripts\phase-0.ps1
+# After the first successful boot, create the least-privileged local storage account:
+.\scripts\phase-0.ps1 -CreateNextcloudServiceAccount
+```
+
+The script creates `.env` from `.env.example` only when it is absent. Replace
+every `change-me-*` value before using any environment outside your machine.
+
+Equivalent manual commands:
+
 ```bash
 cp .env.example .env
 docker compose up -d --build   # Postgres, Nextcloud, Keycloak, and FastAPI

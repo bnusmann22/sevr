@@ -13,8 +13,8 @@ fi
 
 # Run after the first Nextcloud boot. The command is idempotent for local setup:
 # an existing account is left unchanged.
-docker compose exec -T nextcloud php occ user:info "$NEXTCLOUD_SERVICE_USER" >/dev/null 2>&1 || \
-  docker compose exec -T -e OC_PASS="$NEXTCLOUD_SERVICE_PASSWORD" nextcloud php occ user:add \
+docker compose exec -T --user 33 nextcloud php occ user:info "$NEXTCLOUD_SERVICE_USER" >/dev/null 2>&1 || \
+  docker compose exec -T --user 33 -e OC_PASS="$NEXTCLOUD_SERVICE_PASSWORD" nextcloud php occ user:add \
     --password-from-env \
     --display-name="SeVR API service" \
     "$NEXTCLOUD_SERVICE_USER"
