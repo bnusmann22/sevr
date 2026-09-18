@@ -1,6 +1,7 @@
 import type { SevrFile } from "../../types";
 import TlpBadge from "../tlp/TlpBadge";
 import { FileText, Share2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function FileCard({ file }: { file: SevrFile }) {
   return (
@@ -18,10 +19,10 @@ export default function FileCard({ file }: { file: SevrFile }) {
       </div>
       <div className="flex items-center gap-3">
         <TlpBadge label={file.tlpLabel} />
-        <button className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1 hover:underline">
+        <Link to={`/projects/${file.projectId}/files/${file.id}`} className="text-xs font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1 hover:underline">
           <Share2 className="w-3.5 h-3.5" />
-          Export / Share
-        </button>
+          View file
+        </Link>
       </div>
     </div>
   );

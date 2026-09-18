@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Bell, LogOut, Menu, X } from "lucide-react";
 import { readAuthSession } from "../../pages/LoginPage";
+import { apiClient } from "../../api/client";
 
 type TopBarProps = {
   notificationsOpen: boolean;
@@ -10,15 +11,17 @@ type TopBarProps = {
   onLogout: () => void;
 };
 
-const notifications = [
-  { id: "n1", title: "Review requested", detail: "A native export needs supervisor review.", time: "12 min ago" },
-  { id: "n2", title: "Detection queue updated", detail: "One new anomaly is ready for review.", time: "1 hr ago" },
-];
+type Notification = { id: string; title: string; detail: string; time: string; read: boolean };
 
 export default function TopBar({ notificationsOpen, onToggleNotifications, onOpenNavigation, onLogout }: TopBarProps) {
   const location = useLocation();
   const session = readAuthSession();
   const [logoutPromptOpen, setLogoutPromptOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationError, setNotificationError] = useState("");
+  useEffect(() => { apiClient.get<Notification[]>("/notifications").then(({ data }) => setNotifications(data)).catch(() => setNotificationError("Unable to load notifications.")); }, []);
+  const unreadCount = notifications.filter((notification) => !notification.read).length;
+  const markRead = async (id: string) => { try { await apiClient.post(`/notifications/${id}/read`); setNotifications((current) => current.map((notification) => notification.id === id ? { ...notification, read: true } : notification)); } catch { setNotificationError("Unable to update notification state."); } };
   const pageTitle = location.pathname.startsWith("/alerts") ? "Detection Queue"
     : location.pathname.startsWith("/audit") ? "Audit Trail"
     : location.pathname.startsWith("/upload") ? "Upload File"
@@ -36,9 +39,9 @@ export default function TopBar({ notificationsOpen, onToggleNotifications, onOpe
       </div>
 
       <div className="flex items-center gap-2 text-xs font-medium sm:gap-4">
-        <button type="button" onClick={onToggleNotifications} aria-label={`${notifications.length} unread notifications`} aria-expanded={notificationsOpen} className="relative flex items-center rounded-lg p-2 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+        <button type="button" onClick={onToggleNotifications} aria-label={`${unreadCount} unread notifications`} aria-expanded={notificationsOpen} className="relative flex items-center rounded-lg p-2 transition hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-500">
           <Bell className="h-4 w-4 text-slate-600" />
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">{notifications.length}</span>
+          {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[10px] font-bold text-white">{unreadCount}</span>}
         </button>
         <div className="hidden items-center gap-2 border-l border-slate-200 pl-4 sm:flex">
           <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-xs font-bold text-white">{initials}</div>
@@ -55,7 +58,8 @@ export default function TopBar({ notificationsOpen, onToggleNotifications, onOpe
       {notificationsOpen && (
         <aside aria-label="Notifications" className="absolute right-4 top-14 w-[min(22rem,calc(100vw-2rem))] border border-slate-200 bg-white p-4 shadow-xl sm:right-6">
           <div className="mb-3 flex items-center justify-between"><h2 className="font-semibold text-slate-900">Notifications</h2><button type="button" onClick={onToggleNotifications} aria-label="Close notifications" className="rounded p-1 hover:bg-slate-100"><X className="h-4 w-4" /></button></div>
-          <div className="space-y-3">{notifications.map((notification) => <div key={notification.id} className="border-l-2 border-emerald-500 pl-3"><p className="text-sm font-semibold text-slate-900">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-600">{notification.detail}</p><p className="mt-1 text-[10px] text-slate-400">{notification.time}</p></div>)}</div>
+          {notificationError && <p role="alert" className="mb-3 text-xs text-rose-700">{notificationError}</p>}
+          <div className="space-y-3">{notifications.length === 0 && !notificationError ? <p className="text-sm text-slate-500">No notifications.</p> : notifications.map((notification) => <button type="button" key={notification.id} onClick={() => !notification.read && markRead(notification.id)} className={`block w-full border-l-2 pl-3 text-left ${notification.read ? "border-slate-200 opacity-60" : "border-emerald-500"}`}><p className="text-sm font-semibold text-slate-900">{notification.title}</p><p className="mt-1 text-xs leading-5 text-slate-600">{notification.detail}</p><p className="mt-1 text-[10px] text-slate-400">{notification.time}{!notification.read && " · Mark as read"}</p></button>)}</div>
         </aside>
       )}
       {logoutPromptOpen && <div className="absolute right-4 top-14 w-64 border border-slate-200 bg-white p-4 shadow-xl sm:right-6"><p className="text-sm font-semibold text-slate-900">Leave the enclave?</p><p className="mt-1 text-xs leading-5 text-slate-600">Your mock session will be cleared from this browser.</p><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setLogoutPromptOpen(false)} className="rounded px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100">Cancel</button><button type="button" onClick={onLogout} className="rounded bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700">Log out</button></div></div>}

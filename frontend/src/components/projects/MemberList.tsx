@@ -1,16 +1,19 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { apiClient } from "../../api/client";
+import { readAuthSession } from "../../pages/LoginPage";
 import { UserPlus, UserX } from "lucide-react";
 
 type Member = { id: string; name: string; email: string; role: string; department: string; status: "active" | "revoked" };
-const initialMembers: Member[] = [
-  { id: "member-1", name: "Dr. Ada Okafor", email: "researcher@bayero.edu.ng", role: "Supervisor", department: "Environmental Sciences", status: "active" },
-  { id: "member-2", name: "Jamil Yusuf", email: "jamil@bayero.edu.ng", role: "Researcher", department: "Environmental Sciences", status: "active" },
-];
-
-export default function MemberList() {
-  const [members, setMembers] = useState(initialMembers);
+export default function MemberList({ projectId }: { projectId: string }) {
+  const [members, setMembers] = useState<Member[]>([]);
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
-  const invite = (event: FormEvent) => { event.preventDefault(); if (!email.includes("@")) { setMessage("Enter a valid institutional email."); return; } setMessage(`Invitation prepared for ${email}.`); setEmail(""); };
-  return <section className="space-y-4"><div><h2 className="text-sm font-bold text-slate-900">Project members</h2><p className="mt-1 text-xs text-slate-500">Manage access in this UI demonstration.</p></div><form onSubmit={invite} className="flex gap-2"><label className="sr-only" htmlFor="invite-email">Member email</label><input id="invite-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="member@university.edu" className="min-w-0 flex-1 border border-slate-300 px-3 py-2 text-xs focus:border-emerald-600 focus:outline-none" /><button type="submit" className="flex items-center gap-1 bg-slate-900 px-3 py-2 text-xs font-semibold text-white"><UserPlus className="h-3.5 w-3.5" />Invite</button></form>{message && <p role="status" className="text-xs text-emerald-700">{message}</p>}<div className="divide-y divide-slate-200 border border-slate-200 bg-white">{members.map((member) => <div key={member.id} className="flex items-center justify-between gap-4 p-4"><div><p className="text-sm font-semibold text-slate-900">{member.name}</p><p className="text-xs text-slate-500">{member.email} · {member.role} · {member.department}</p></div>{member.status === "active" ? <button type="button" onClick={() => setMembers((current) => current.map((item) => item.id === member.id ? { ...item, status: "revoked" } : item))} className="flex items-center gap-1 text-xs font-semibold text-rose-700"><UserX className="h-3.5 w-3.5" />Revoke</button> : <span className="text-xs font-semibold text-rose-700">Revoked</span>}</div>)}</div></section>;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const canManage = ["supervisor", "institution_admin"].includes(readAuthSession()?.role ?? "");
+
+  useEffect(() => { apiClient.get<Member[]>(`/projects/${projectId}/members`).then(({ data }) => setMembers(data)).catch(() => setError("Unable to load project members.")).finally(() => setLoading(false)); }, [projectId]);
+  const invite = async (event: FormEvent) => { event.preventDefault(); if (!email.includes("@")) { setMessage("Enter a valid institutional email."); return; } try { const { data } = await apiClient.post<Member>(`/projects/${projectId}/members`, { email }); setMembers((current) => [...current, data]); setMessage(`Invitation prepared for ${email}.`); setEmail(""); } catch { setMessage("Unable to prepare invitation."); } };
+  const revoke = async (memberId: string) => { try { const { data } = await apiClient.post<Member>(`/projects/${projectId}/members/${memberId}/revoke`); setMembers((current) => current.map((member) => member.id === memberId ? data : member)); } catch { setMessage("Unable to revoke this member."); } };
+  return <section className="space-y-4"><div><h2 className="text-sm font-bold text-slate-900">Project members</h2><p className="mt-1 text-xs text-slate-500">{canManage ? "Manage access for this research enclave." : "You have read-only member access."}</p></div>{canManage && <form onSubmit={invite} className="flex gap-2"><label className="sr-only" htmlFor="invite-email">Member email</label><input id="invite-email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="member@university.edu" className="min-w-0 flex-1 border border-slate-300 px-3 py-2 text-xs focus:border-emerald-600 focus:outline-none" /><button type="submit" className="flex items-center gap-1 bg-slate-900 px-3 py-2 text-xs font-semibold text-white"><UserPlus className="h-3.5 w-3.5" />Invite</button></form>}{message && <p role="status" className="text-xs text-emerald-700">{message}</p>}{loading && <p role="status" className="text-sm text-slate-500">Loading members...</p>}{error && <p role="alert" className="border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</p>}{!loading && !error && <div className="divide-y divide-slate-200 border border-slate-200 bg-white">{members.length === 0 ? <p className="p-6 text-sm text-slate-500">No members found.</p> : members.map((member) => <div key={member.id} className="flex items-center justify-between gap-4 p-4"><div><p className="text-sm font-semibold text-slate-900">{member.name}</p><p className="text-xs text-slate-500">{member.email} · {member.role} · {member.department}</p></div>{member.status === "active" && canManage ? <button type="button" onClick={() => revoke(member.id)} className="flex items-center gap-1 text-xs font-semibold text-rose-700"><UserX className="h-3.5 w-3.5" />Revoke</button> : <span className={`text-xs font-semibold ${member.status === "revoked" ? "text-rose-700" : "text-slate-400"}`}>{member.status === "revoked" ? "Revoked" : "Active"}</span>}</div>)}</div>}</section>;
 }

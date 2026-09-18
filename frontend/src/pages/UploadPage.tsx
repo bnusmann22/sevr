@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { TLPLabel } from "../types";
+import { apiClient } from "../api/client";
+import type { SevrFile, TLPLabel } from "../types";
 import TlpSelector from "../components/tlp/TlpSelector";
 import UploadDropzone from "../components/files/UploadDropzone";
 import { Upload, Shield, Info, CheckCircle } from "lucide-react";
@@ -8,6 +9,26 @@ export default function UploadPage() {
   const [label, setLabel] = useState<TLPLabel>("AMBER");
   const [isUploaded, setIsUploaded] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [error, setError] = useState("");
+
+  const ingestFile = async () => {
+    if (!selectedFile) return;
+    setIsUploading(true);
+    setIsUploaded(false);
+    setError("");
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("tlpLabel", label);
+    try {
+      await apiClient.post<SevrFile>("/projects/proj_1/files", formData, { headers: { "Content-Type": "multipart/form-data" } });
+      setIsUploaded(true);
+    } catch {
+      setError("Unable to ingest this file. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -25,7 +46,7 @@ export default function UploadPage() {
 
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-4">
         <div>
-          <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <label className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-emerald-600" />
             Assign Traffic Light Protocol (TLP) Classification
           </label>
@@ -41,12 +62,12 @@ export default function UploadPage() {
 
         <div className="pt-2 flex justify-end">
           <button
-            onClick={() => setIsUploaded(true)}
-            disabled={!selectedFile}
+            onClick={ingestFile}
+            disabled={!selectedFile || isUploading}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition flex items-center gap-2 shadow-sm"
           >
             <CheckCircle className="w-4 h-4" />
-            Ingest &amp; Classify Asset
+            {isUploading ? "Ingesting..." : "Ingest & Classify Asset"}
           </button>
         </div>
 
@@ -56,6 +77,7 @@ export default function UploadPage() {
             File successfully ingested with TLP:{label} classification.
           </div>
         )}
+        {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
       </div>
     </div>
   );

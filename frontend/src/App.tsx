@@ -16,6 +16,8 @@ import AuditTrailPage from "./pages/AuditTrailPage";
 import DetectionAlertsPage from "./pages/DetectionAlertsPage";
 import ProjectListPage from "./pages/ProjectListPage";
 import ExternalCollaboratorPage from "./pages/ExternalCollaboratorPage";
+import AuthStatusPage from "./pages/AuthStatusPage";
+import FileDetailPage from "./pages/FileDetailPage";
 
 function AppLoadingBoundary() {
   const [pendingRequests, setPendingRequests] = useState(0);
@@ -63,6 +65,8 @@ function AppLoadingBoundary() {
         {/* Auth Gateway Boundary */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<LoginPage />} />
+        <Route path="/auth/callback" element={<AuthStatusPage mode="callback" />} />
+        <Route path="/auth/session-expired" element={<AuthStatusPage mode="expired" />} />
         <Route path="/share/:token" element={<ExternalCollaboratorPage />} />
 
         {/* Track B: Core Operational Platform (Authenticated Enclave Shell) */}
@@ -83,10 +87,11 @@ function ProtectedApp() {
   return (
     <Shell>
       <Routes>
-        <Route path="/home" element={<ProjectWorkspace />} />
+        <Route path="/home" element={<ProjectListPage />} />
         <Route path="/app/projects" element={<ProjectWorkspace />} />
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspace />} />
+        <Route path="/projects/:projectId/files/:fileId" element={<FileDetailPage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/export" element={<ExportSharePage />} />
         <Route path="/audit" element={<AuditTrailPage />} />
