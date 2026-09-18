@@ -5,3 +5,9 @@ __pycache__/
 *.pyc
 .DS_Store
 *.log
+
+# Local planning, QA, bug, and implementation notes
+QA_Report.md
+bug_Report.md
+changes.md
+Implementation.md
