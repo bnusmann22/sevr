@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     database_url: str
     cors_origins: str = "http://localhost:5173"
     keycloak_url: str = "http://keycloak:8080"
+    keycloak_public_url: str = "http://localhost:8081"
     keycloak_realm: str = "sevr"
     keycloak_client_id: str = "sevr-api"
     jwt_audience: str = "sevr-api"

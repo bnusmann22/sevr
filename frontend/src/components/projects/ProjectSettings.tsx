@@ -1,11 +1,16 @@
 import { FormEvent, useEffect, useState } from "react";
 import { projectsApi } from "../../api/services";
-import type { TLPLabel } from "../../types";
+import type { Project, TLPLabel } from "../../types";
 import TlpSelector from "../tlp/TlpSelector";
 import { readAuthSession } from "../../pages/LoginPage";
 import { Lock, Save, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 
-export default function ProjectSettings({ projectId }: { projectId: string }) {
+interface ProjectSettingsProps {
+  projectId: string;
+  onProjectUpdated?: (project: Project) => void;
+}
+
+export default function ProjectSettings({ projectId, onProjectUpdated }: ProjectSettingsProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [tlp, setTlp] = useState<TLPLabel>("AMBER");
@@ -25,6 +30,7 @@ export default function ProjectSettings({ projectId }: { projectId: string }) {
       setName(data.name);
       setDescription(data.description ?? "");
       setTlp(data.defaultTlp ?? "AMBER");
+      onProjectUpdated?.(data);
     } catch {
       setError("Unable to retrieve enclave policy configuration.");
     } finally {
@@ -39,12 +45,25 @@ export default function ProjectSettings({ projectId }: { projectId: string }) {
   const save = async (event: FormEvent) => {
     event.preventDefault();
     if (!canManage) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError("Research project name cannot be empty.");
+      return;
+    }
     setSaving(true);
     setError("");
     setStatus("");
     try {
-      await projectsApi.update(projectId, { name, description, defaultTlp: tlp });
+      const updated = await projectsApi.update(projectId, {
+        name: trimmedName,
+        description: description.trim(),
+        defaultTlp: tlp,
+      });
+      setName(updated.name);
+      setDescription(updated.description ?? "");
+      setTlp(updated.defaultTlp ?? "AMBER");
       setStatus("Enclave parameters and default TLP classification policy saved successfully.");
+      onProjectUpdated?.(updated);
     } catch {
       setError("Unable to update project settings. Please try again.");
     } finally {

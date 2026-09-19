@@ -18,6 +18,7 @@ import ProjectListPage from "./pages/ProjectListPage";
 import ExternalCollaboratorPage from "./pages/ExternalCollaboratorPage";
 import AuthStatusPage from "./pages/AuthStatusPage";
 import FileDetailPage from "./pages/FileDetailPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
 
 function AppLoadingBoundary() {
   const [pendingRequests, setPendingRequests] = useState(0);
@@ -88,6 +89,7 @@ function ProtectedApp() {
     <Shell>
       <Routes>
         <Route path="/home" element={<ProjectListPage />} />
+        <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/app/projects" element={<ProjectWorkspace />} />
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspace />} />

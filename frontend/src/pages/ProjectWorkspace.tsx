@@ -153,7 +153,12 @@ export default function ProjectWorkspace() {
       {/* Tabs */}
       {selectedTab === "activity" && projectId && <ActivityFeed projectId={projectId} />}
       {selectedTab === "members" && projectId && <MemberList projectId={projectId} />}
-      {selectedTab === "settings" && projectId && <ProjectSettings projectId={projectId} />}
+      {selectedTab === "settings" && projectId && (
+        <ProjectSettings
+          projectId={projectId}
+          onProjectUpdated={(updatedProject) => setProject(updatedProject)}
+        />
+      )}
 
       {selectedTab === "files" && (
         <div className="space-y-6">

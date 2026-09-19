@@ -68,6 +68,11 @@ services:
     ports: ["8000:8000"]
     env_file: .env
     volumes: ["./api:/app"]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   db_data:

@@ -12,15 +12,19 @@ import {
 } from "lucide-react";
 import { apiClient } from "../api/client";
 import Logo from "../components/layout/Logo";
+import { generateCodeVerifier, generateCodeChallenge, generateRandomState, storeOidcState } from "../utils/pkce";
 
 type AuthMode = "login" | "signup";
 type AuthMethod = "credentials" | "sso";
 
 export type AuthSession = {
+  id?: string;
   email: string;
   name: string;
-  role: "researcher" | "supervisor" | "institution_admin";
+  role: "researcher" | "supervisor" | "institution_admin" | "system_admin";
   department?: string;
+  title?: string;
+  profile_completed?: boolean;
   token: string;
   authenticatedAt: string;
 };
@@ -178,11 +182,36 @@ export default function LoginPage() {
     setIsSsoLoading(true);
 
     try {
-      const response = await apiClient.get<{ redirectUrl: string }>('/api/auth/sso/start');
-      if (!response.data?.redirectUrl) {
-        throw new Error("SSO authorization endpoint is unavailable.");
+      const verifier = generateCodeVerifier();
+      const challenge = await generateCodeChallenge(verifier);
+      const state = generateRandomState();
+      storeOidcState(verifier, state, requestedDestination);
+
+      let authEndpoint = "http://localhost:8081/realms/sevr/protocol/openid-connect/auth";
+      let clientId = "sevr-web";
+      try {
+        const response = await apiClient.get<{ authorizationUrl: string; clientId?: string }>("/api/auth/sso/start");
+        if (response.data?.authorizationUrl) {
+          authEndpoint = response.data.authorizationUrl;
+        }
+        if (response.data?.clientId) {
+          clientId = response.data.clientId;
+        }
+      } catch {
+        // Fallback to local default endpoint
       }
-      window.location.assign(response.data.redirectUrl);
+
+      const redirectUri = `${window.location.origin}/auth/callback`;
+      const authUrl = new URL(authEndpoint);
+      authUrl.searchParams.set("client_id", clientId);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", "openid profile email");
+      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("code_challenge", challenge);
+      authUrl.searchParams.set("code_challenge_method", "S256");
+
+      window.location.assign(authUrl.toString());
     } catch (error) {
       const message =
         error instanceof Error && error.message
@@ -190,7 +219,6 @@ export default function LoginPage() {
           : "SSO is temporarily unavailable. Please use institutional credentials instead.";
       setError(message);
       setSuccess("");
-    } finally {
       setIsSsoLoading(false);
     }
   };
@@ -301,9 +329,10 @@ export default function LoginPage() {
                 </label>
               )}
 
-              <label className="block">
+              <label className="block" htmlFor="login-email">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Institution email</span>
                 <input
+                  id="login-email"
                   type="email"
                   value={form.email}
                   onChange={(event) => updateField("email", event.target.value)}
@@ -312,10 +341,11 @@ export default function LoginPage() {
                 />
               </label>
 
-              <label className="block">
+              <label className="block" htmlFor="login-password">
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Password</span>
                 <div className="relative">
                   <input
+                    id="login-password"
                     type={showPassword ? "text" : "password"}
                     value={form.password}
                     onChange={(event) => updateField("password", event.target.value)}
@@ -388,6 +418,7 @@ export default function LoginPage() {
               )}
 
               <button
+                id="login-submit-btn"
                 type="submit"
                 disabled={isSubmitting}
                 className="flex w-full items-center justify-center gap-2 bg-[#0b2528] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-teal-900 focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"

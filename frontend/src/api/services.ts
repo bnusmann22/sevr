@@ -4,6 +4,8 @@ import type {
   SevrFile,
   ExportDecision,
   TLPLabel,
+  UserProfile,
+  ProjectInvitation,
 } from "../types";
 
 export interface ProjectMember {
@@ -119,6 +121,93 @@ export const membersApi = {
     const { data } = await apiClient.post<ProjectMember>(
       `/projects/${projectId}/members/${memberId}/revoke`
     );
+    return data;
+  },
+
+  async updateRole(projectId: string, memberId: string, role: string): Promise<ProjectMember> {
+    const { data } = await apiClient.patch<ProjectMember>(
+      `/projects/${projectId}/members/${memberId}/role`,
+      { role }
+    );
+    return data;
+  },
+
+  async leave(projectId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.post<{ message: string }>(`/projects/${projectId}/leave`);
+    return data;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Admin API
+// ---------------------------------------------------------------------------
+export const adminApi = {
+  async provisionUser(payload: { email: string; role?: string; temporaryPassword?: string }): Promise<UserProfile> {
+    const { data } = await apiClient.post<UserProfile>("/api/admin/users", payload);
+    return data;
+  },
+
+  async listUsers(params?: { search?: string; page?: number }): Promise<UserProfile[]> {
+    const { data } = await apiClient.get<UserProfile[]>("/api/admin/users", { params });
+    return data;
+  },
+
+  async changeRole(userId: string, role: string): Promise<UserProfile> {
+    const { data } = await apiClient.patch<UserProfile>(`/api/admin/users/${userId}/role`, { role });
+    return data;
+  },
+
+  async deleteUser(userId: string): Promise<void> {
+    await apiClient.delete(`/api/admin/users/${userId}`);
+  },
+
+  async resetCredentials(userId: string): Promise<UserProfile> {
+    const { data } = await apiClient.get<UserProfile>(`/api/admin/users/${userId}/credentials`);
+    return data;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Profile KYC API
+// ---------------------------------------------------------------------------
+export const profileApi = {
+  async getProfile(): Promise<UserProfile> {
+    const { data } = await apiClient.get<UserProfile>("/api/users/me/profile");
+    return data;
+  },
+
+  async updateProfile(payload: Partial<UserProfile>): Promise<UserProfile> {
+    const { data } = await apiClient.put<UserProfile>("/api/users/me/profile", payload);
+    return data;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Enclave Collaborator Invitations API
+// ---------------------------------------------------------------------------
+export const invitationsApi = {
+  async create(projectId: string, payload: { email: string; role?: string }): Promise<ProjectInvitation> {
+    const { data } = await apiClient.post<ProjectInvitation>(`/projects/${projectId}/invitations`, payload);
+    return data;
+  },
+
+  async listForProject(projectId: string): Promise<ProjectInvitation[]> {
+    const { data } = await apiClient.get<ProjectInvitation[]>(`/projects/${projectId}/invitations`);
+    return data;
+  },
+
+  async listPendingForMe(): Promise<ProjectInvitation[]> {
+    const { data } = await apiClient.get<ProjectInvitation[]>("/users/me/invitations/pending");
+    return data;
+  },
+
+  async accept(invitationId: string): Promise<{ message: string; project_id: string }> {
+    const { data } = await apiClient.post<{ message: string; project_id: string }>(`/invitations/${invitationId}/accept`);
+    return data;
+  },
+
+  async decline(invitationId: string): Promise<{ message: string; project_id: string }> {
+    const { data } = await apiClient.post<{ message: string; project_id: string }>(`/invitations/${invitationId}/decline`);
     return data;
   },
 };

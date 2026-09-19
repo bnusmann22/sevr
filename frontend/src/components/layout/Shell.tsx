@@ -3,13 +3,17 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import OfflineBanner from "./OfflineBanner";
-import { clearAuthSession } from "../../pages/LoginPage";
+import PendingInvitesModal from "../modals/PendingInvitesModal";
+import ProfileModal from "../modals/ProfileModal";
+import { clearAuthSession, readAuthSession } from "../../pages/LoginPage";
 
 export default function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const session = readAuthSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(() => window.navigator.onLine);
+  const [profilePromptOpen, setProfilePromptOpen] = useState(() => session?.profile_completed === false);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -40,6 +44,18 @@ export default function Shell({ children }: { children: ReactNode }) {
         {!isOnline && <OfflineBanner />}
         <main className="p-6 flex-1 overflow-auto">{children}</main>
       </div>
+
+      {/* Post-login Collaboration Handshake */}
+      <PendingInvitesModal />
+
+      {/* Mandatory KYC Setup on First Login */}
+      {profilePromptOpen && (
+        <ProfileModal
+          isOpen={profilePromptOpen}
+          onClose={() => setProfilePromptOpen(false)}
+          onSaved={() => setProfilePromptOpen(false)}
+        />
+      )}
     </div>
   );
 }

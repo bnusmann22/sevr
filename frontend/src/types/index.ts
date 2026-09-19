@@ -4,7 +4,7 @@
 export type TLP20Label = "CLEAR" | "GREEN" | "AMBER" | "AMBER_STRICT" | "RED";
 export type TLPLabel = TLP20Label | "WHITE"; // Backward compatibility alias
 
-export type UserRole = "researcher" | "supervisor" | "external_collaborator" | "institution_admin";
+export type UserRole = "researcher" | "supervisor" | "external_collaborator" | "institution_admin" | "system_admin";
 export type Role = UserRole;
 
 export interface User {
@@ -14,6 +14,38 @@ export interface User {
   role: UserRole;
   department: string;
   token?: string;
+  title?: string;
+  profile_completed?: boolean;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  role: UserRole;
+  title?: string;
+  name?: string;
+  edu_status?: "Student" | "Staff" | "PI" | string;
+  student_cadre?: "Undergraduate" | "Postgraduate" | string;
+  student_level?: "100L" | "200L" | "300L" | "400L" | "500L" | "MSc" | "PhD" | string;
+  department?: string;
+  faculty?: string;
+  profile_completed: boolean;
+  created_at?: string;
+  temporary_password?: string;
+}
+
+export interface ProjectInvitation {
+  id: string;
+  projectId: string;
+  projectName?: string;
+  projectDescription?: string;
+  defaultTlp?: TLPLabel;
+  inviterId?: string;
+  inviterName?: string;
+  inviterEmail?: string;
+  inviteeEmail: string;
+  status: "pending" | "accepted" | "declined" | "expired";
+  createdAt: string;
 }
 
 export interface Project {

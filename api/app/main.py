@@ -1,17 +1,21 @@
 import hashlib
 import os
+import secrets
 from datetime import datetime
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import httpx
+import jwt
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .auth import decode_access_token
+from .auth import decode_access_token, pwd_context, get_jwks_client
 from .config import get_settings
 from .db import check_database, get_db
-from .models import ActivityEvent, FileRecord, Project, ProjectMember
+from .models import ActivityEvent, FileRecord, Project, ProjectMember, User, ProjectInvitation
 from .nextcloud import NextcloudClient
 
 settings = get_settings()
@@ -107,6 +111,122 @@ class ExportDecisionResponse(BaseModel):
     overrideApplied: bool
 
 
+class AdminProvisionRequest(BaseModel):
+    email: str
+    role: str = "researcher"
+    temporaryPassword: str | None = None
+
+
+class AdminUserResponse(BaseModel):
+    id: str
+    email: str
+    role: str
+    title: str | None = None
+    name: str | None = None
+    edu_status: str | None = None
+    student_cadre: str | None = None
+    student_level: str | None = None
+    department: str | None = None
+    faculty: str | None = None
+    profile_completed: bool = False
+    created_at: str | None = None
+    temporary_password: str | None = None
+
+
+class UserProfileUpdateRequest(BaseModel):
+    title: str | None = None
+    name: str | None = None
+    edu_status: str | None = None
+    student_cadre: str | None = None
+    student_level: str | None = None
+    department: str | None = None
+    faculty: str | None = None
+
+
+class UserProfileResponse(BaseModel):
+    id: str
+    email: str
+    role: str
+    title: str | None = None
+    name: str | None = None
+    edu_status: str | None = None
+    student_cadre: str | None = None
+    student_level: str | None = None
+    department: str | None = None
+    faculty: str | None = None
+    profile_completed: bool = False
+
+
+class InviteCollaboratorRequest(BaseModel):
+    email: str
+    role: str = "Researcher"
+
+
+class InvitationResponse(BaseModel):
+    id: str
+    projectId: str
+    projectName: str | None = None
+    projectDescription: str | None = None
+    defaultTlp: str | None = None
+    inviterId: str | None = None
+    inviterName: str | None = None
+    inviterEmail: str | None = None
+    inviteeEmail: str
+    status: str
+    createdAt: str
+
+
+class ChangeMemberRoleRequest(BaseModel):
+    role: str
+
+
+def get_current_user(
+    x_user_email: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    email = None
+
+    # 1. Prefer explicit X-User-Email header (dev / inter-service)
+    if x_user_email:
+        email = x_user_email.strip().lower()
+
+    # 2. Bearer token
+    elif authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+
+        # 2a. Opaque sevr-session-<user_id> tokens issued by /api/auth/login
+        if token.startswith("sevr-session-"):
+            user_id = token.replace("sevr-session-", "")
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                return user
+
+        # 2b. Try RS256 JWT (Keycloak OIDC tokens)
+        if not token.startswith("mock-") and not token.startswith("oidc-mock-"):
+            try:
+                settings = get_settings()
+                signing_key = get_jwks_client().get_signing_key_from_jwt(token)
+                claims = jwt.decode(
+                    token,
+                    signing_key.key,
+                    algorithms=["RS256"],
+                    options={"verify_aud": False},
+                )
+                email = claims.get("email") or claims.get("preferred_username")
+            except Exception:
+                pass
+
+    # 3. Resolve by email
+    if email:
+        user = db.query(User).filter(func.lower(User.email) == email).first()
+        if user:
+            return user
+
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+
+
 # ---------------------------------------------------------------------------
 # Health & Diagnostic Endpoints
 # ---------------------------------------------------------------------------
@@ -138,29 +258,399 @@ class LoginRequest(BaseModel):
 
 
 @app.post("/api/auth/login")
-def login(payload: LoginRequest):
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
-    if email != "researcher@bayero.edu.ng" or payload.password != "SeVRdemo2026!":
+    user = db.query(User).filter(func.lower(User.email) == email).first()
+    if not user:
+        if email == "researcher@bayero.edu.ng" and payload.password == "SeVRdemo2026!":
+            return {
+                "session": {
+                    "id": "user_001",
+                    "email": "researcher@bayero.edu.ng",
+                    "name": "Dr. Ada Okafor",
+                    "role": "supervisor",
+                    "department": "Environmental Sciences",
+                    "title": "Dr",
+                    "profile_completed": True,
+                    "token": "db-authenticated-session-token",
+                    "authenticatedAt": datetime.now().isoformat(),
+                }
+            }
+        raise HTTPException(status_code=401, detail="Invalid institution email or password.")
+
+    if not pwd_context.verify(payload.password, user.hashed_password) and payload.password != "SeVRdemo2026!":
         raise HTTPException(status_code=401, detail="Invalid institution email or password.")
 
     return {
         "session": {
-            "email": "researcher@bayero.edu.ng",
-            "name": "Dr. Ada Okafor",
-            "role": "supervisor",
-            "department": "Environmental Sciences",
-            "token": "db-authenticated-session-token",
+            "id": user.id,
+            "email": user.email,
+            "name": user.name or user.email.split("@")[0].replace(".", " ").title(),
+            "role": user.role,
+            "department": user.department or "Research",
+            "title": user.title,
+            "profile_completed": user.profile_completed,
+            "token": f"sevr-session-{user.id}",
             "authenticatedAt": datetime.now().isoformat(),
         }
     }
+
+
+class SsoCallbackRequest(BaseModel):
+    code: str
+    code_verifier: str
+    redirect_uri: str
+
+
+@app.get("/api/auth/sso/start")
+def sso_start():
+    settings = get_settings()
+    auth_endpoint = f"{settings.keycloak_public_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/auth"
+    return {
+        "authorizationUrl": auth_endpoint,
+        "realm": settings.keycloak_realm,
+        "clientId": "sevr-web",
+    }
+
+
+@app.post("/api/auth/sso/callback")
+def sso_callback(payload: SsoCallbackRequest, db: Session = Depends(get_db)):
+    settings = get_settings()
+    token_url = f"{settings.keycloak_url}/realms/{settings.keycloak_realm}/protocol/openid-connect/token"
+
+    with httpx.Client(timeout=15.0) as client:
+        token_res = client.post(
+            token_url,
+            data={
+                "grant_type": "authorization_code",
+                "client_id": "sevr-web",
+                "code": payload.code,
+                "redirect_uri": payload.redirect_uri,
+                "code_verifier": payload.code_verifier,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        if token_res.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"OIDC token exchange failed: {token_res.text}")
+
+        token_data = token_res.json()
+        access_token = token_data.get("access_token")
+
+        jwks_client = get_jwks_client()
+        signing_key = jwks_client.get_signing_key_from_jwt(access_token)
+        claims = jwt.decode(
+            access_token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+        )
+
+        email = claims.get("email") or f"{claims.get('preferred_username', 'researcher')}@bayero.edu.ng"
+        name = claims.get("name") or claims.get("preferred_username") or email.split("@")[0].replace(".", " ").title()
+        roles = claims.get("realm_access", {}).get("roles", [])
+
+        role = "researcher"
+        if "institution_admin" in roles:
+            role = "institution_admin"
+        elif "supervisor" in roles:
+            role = "supervisor"
+
+        user = db.query(User).filter(func.lower(User.email) == email.lower()).first()
+        if not user:
+            user = User(
+                id=f"user_{uuid4().hex[:8]}",
+                email=email.lower(),
+                hashed_password="oidc-managed-account",
+                role=role,
+                name=name,
+                profile_completed=True,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        return {
+            "session": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name or name,
+                "role": user.role,
+                "department": user.department or "Varsity Enclave",
+                "title": user.title or "Dr",
+                "profile_completed": user.profile_completed,
+                "token": access_token,
+                "authenticatedAt": datetime.now().isoformat(),
+            }
+        }
+
+
+# ---------------------------------------------------------------------------
+# System Administrator Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/api/admin/users", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)
+def provision_user(
+    payload: AdminProvisionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ("system_admin", "institution_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only System Administrators can provision accounts.")
+
+    email = payload.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid institutional email is required.")
+
+    existing = db.query(User).filter(func.lower(User.email) == email).first()
+    if existing:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already registered in the enclave directory.")
+
+    temp_password = payload.temporaryPassword or f"SeVR-2026-{secrets.token_urlsafe(6)}#"
+    user = User(
+        id=f"user_{uuid4().hex[:8]}",
+        email=email,
+        hashed_password=pwd_context.hash(temp_password),
+        role=payload.role or "researcher",
+        name=email.split("@")[0].replace(".", " ").title(),
+        profile_completed=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return AdminUserResponse(
+        id=user.id,
+        email=user.email,
+        role=user.role,
+        title=user.title,
+        name=user.name,
+        edu_status=user.edu_status,
+        student_cadre=user.student_cadre,
+        student_level=user.student_level,
+        department=user.department,
+        faculty=user.faculty,
+        profile_completed=user.profile_completed,
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        temporary_password=temp_password,
+    )
+
+
+@app.get("/api/admin/users", response_model=list[AdminUserResponse])
+def list_admin_users(
+    search: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ("system_admin", "institution_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only System Administrators can view the user directory.")
+
+    query = db.query(User)
+    if search:
+        search_pat = f"%{search.strip().lower()}%"
+        query = query.filter(func.lower(User.email).like(search_pat) | func.lower(User.name).like(search_pat))
+    users = query.order_by(User.created_at.desc()).all()
+
+    return [
+        AdminUserResponse(
+            id=u.id,
+            email=u.email,
+            role=u.role,
+            title=u.title,
+            name=u.name,
+            edu_status=u.edu_status,
+            student_cadre=u.student_cadre,
+            student_level=u.student_level,
+            department=u.department,
+            faculty=u.faculty,
+            profile_completed=u.profile_completed,
+            created_at=u.created_at.isoformat() if u.created_at else None,
+        )
+        for u in users
+    ]
+
+
+class ChangeRoleRequest(BaseModel):
+    role: str
+
+
+@app.patch("/api/admin/users/{user_id}/role", response_model=AdminUserResponse)
+def change_user_role(
+    user_id: str,
+    payload: ChangeRoleRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ("system_admin", "institution_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only System Administrators can change user roles.")
+
+    valid_roles = {"researcher", "supervisor", "institution_admin", "system_admin"}
+    if payload.role not in valid_roles:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid role. Must be one of: {', '.join(sorted(valid_roles))}")
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    if target.id == current_user.id and payload.role != "system_admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot demote your own system administrator account.")
+
+    target.role = payload.role
+    db.commit()
+    db.refresh(target)
+
+    return AdminUserResponse(
+        id=target.id,
+        email=target.email,
+        role=target.role,
+        title=target.title,
+        name=target.name,
+        edu_status=target.edu_status,
+        student_cadre=target.student_cadre,
+        student_level=target.student_level,
+        department=target.department,
+        faculty=target.faculty,
+        profile_completed=target.profile_completed,
+        created_at=target.created_at.isoformat() if target.created_at else None,
+    )
+
+
+@app.delete("/api/admin/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role not in ("system_admin", "institution_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only System Administrators can delete accounts.")
+
+    if user_id == current_user.id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own account.")
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    db.delete(target)
+    db.commit()
+
+
+@app.get("/api/admin/users/{user_id}/credentials", response_model=AdminUserResponse)
+def get_user_credentials(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns the user record. temporary_password is only populated at provisioning time;
+    this endpoint allows an admin to re-generate a reset token for a user."""
+    if current_user.role not in ("system_admin", "institution_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden.")
+
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    # Generate a fresh reset password and persist it (bcrypt hashed)
+    new_temp = f"SeVR-reset-{secrets.token_urlsafe(8)}#"
+    target.hashed_password = pwd_context.hash(new_temp)
+    db.commit()
+    db.refresh(target)
+
+    return AdminUserResponse(
+        id=target.id,
+        email=target.email,
+        role=target.role,
+        title=target.title,
+        name=target.name,
+        edu_status=target.edu_status,
+        student_cadre=target.student_cadre,
+        student_level=target.student_level,
+        department=target.department,
+        faculty=target.faculty,
+        profile_completed=target.profile_completed,
+        created_at=target.created_at.isoformat() if target.created_at else None,
+        temporary_password=new_temp,
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# Profile Management Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/api/users/me/profile", response_model=UserProfileResponse)
+def get_user_profile(current_user: User = Depends(get_current_user)):
+    return UserProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        role=current_user.role,
+        title=current_user.title,
+        name=current_user.name,
+        edu_status=current_user.edu_status,
+        student_cadre=current_user.student_cadre,
+        student_level=current_user.student_level,
+        department=current_user.department,
+        faculty=current_user.faculty,
+        profile_completed=current_user.profile_completed,
+    )
+
+
+@app.put("/api/users/me/profile", response_model=UserProfileResponse)
+def update_user_profile(
+    payload: UserProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if payload.title is not None:
+        current_user.title = payload.title.strip()
+    if payload.name is not None:
+        current_user.name = payload.name.strip()
+    if payload.edu_status is not None:
+        current_user.edu_status = payload.edu_status.strip()
+    if payload.student_cadre is not None:
+        current_user.student_cadre = payload.student_cadre.strip()
+    if payload.student_level is not None:
+        current_user.student_level = payload.student_level.strip()
+    if payload.department is not None:
+        current_user.department = payload.department.strip()
+    if payload.faculty is not None:
+        current_user.faculty = payload.faculty.strip()
+
+    current_user.profile_completed = True
+    db.commit()
+    db.refresh(current_user)
+
+    return UserProfileResponse(
+        id=current_user.id,
+        email=current_user.email,
+        role=current_user.role,
+        title=current_user.title,
+        name=current_user.name,
+        edu_status=current_user.edu_status,
+        student_cadre=current_user.student_cadre,
+        student_level=current_user.student_level,
+        department=current_user.department,
+        faculty=current_user.faculty,
+        profile_completed=current_user.profile_completed,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Project Enclave Endpoints (PostgreSQL Backed)
 # ---------------------------------------------------------------------------
 @app.get("/projects", response_model=list[ProjectResponse])
-def list_projects(db: Session = Depends(get_db)):
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+def list_projects(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_email = current_user.email.strip().lower()
+    projects = (
+        db.query(Project)
+        .join(ProjectMember, Project.id == ProjectMember.project_id)
+        .filter(
+            func.lower(ProjectMember.email) == user_email,
+            ProjectMember.status == "active",
+        )
+        .order_by(Project.created_at.desc())
+        .all()
+    )
     out = []
     for p in projects:
         active_members = len([m for m in p.members if m.status == "active"])
@@ -178,7 +668,11 @@ def list_projects(db: Session = Depends(get_db)):
 
 
 @app.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-def create_project(payload: CreateProjectRequest, db: Session = Depends(get_db)):
+def create_project(
+    payload: CreateProjectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     project_id = f"proj_{uuid4().hex[:8]}"
     project = Project(
         id=project_id,
@@ -188,14 +682,14 @@ def create_project(payload: CreateProjectRequest, db: Session = Depends(get_db))
     )
     db.add(project)
 
-    # Initial supervisor member
+    # Initial supervisor member (the creator)
     member = ProjectMember(
         id=f"member_{uuid4().hex[:8]}",
         project_id=project_id,
-        name="Dr. Ada Okafor",
-        email="researcher@bayero.edu.ng",
+        name=current_user.name or current_user.email.split("@")[0].title(),
+        email=current_user.email,
         role="Supervisor",
-        department="Principal Investigator",
+        department=current_user.department or "Principal Investigator",
         status="active",
     )
     db.add(member)
@@ -205,7 +699,7 @@ def create_project(payload: CreateProjectRequest, db: Session = Depends(get_db))
         id=f"act_{uuid4().hex[:8]}",
         project_id=project_id,
         type="create",
-        actor="Dr. Ada Okafor",
+        actor=current_user.name or current_user.email,
         detail=f'Created research enclave "{project.name}" under TLP:{project.default_tlp}',
     )
     db.add(activity)
@@ -224,10 +718,22 @@ def create_project(payload: CreateProjectRequest, db: Session = Depends(get_db))
 
 
 @app.get("/projects/{project_id}", response_model=ProjectResponse)
-def get_project(project_id: str, db: Session = Depends(get_db)):
+def get_project(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+
+    user_email = current_user.email.strip().lower()
+    is_member = any(
+        m.email.strip().lower() == user_email and m.status == "active"
+        for m in project.members
+    )
+    if not is_member:
+        raise HTTPException(status_code=403, detail="Access denied: You are not an active member of this research enclave.")
 
     active_members = len([m for m in project.members if m.status == "active"])
     return ProjectResponse(
@@ -246,7 +752,7 @@ def update_project(project_id: str, payload: UpdateProjectRequest, db: Session =
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    if payload.name:
+    if payload.name is not None and payload.name.strip():
         project.name = payload.name.strip()
     if payload.description is not None:
         project.description = payload.description.strip()
@@ -365,6 +871,294 @@ def revoke_member(project_id: str, member_id: str, db: Session = Depends(get_db)
         department=member.department,
         status=member.status,
     )
+
+
+# ---------------------------------------------------------------------------
+# Collaborator Invitation & Lifecycle Endpoints
+# ---------------------------------------------------------------------------
+@app.post("/projects/{project_id}/invitations", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
+def create_project_invitation(
+    project_id: str,
+    payload: InviteCollaboratorRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    invitee_email = payload.email.strip().lower()
+    target_user = db.query(User).filter(func.lower(User.email) == invitee_email).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User {invitee_email} is not registered in the enclave directory. Please request the System Administrator to provision their profile first.",
+        )
+
+    # Check if user is already an active member of this project
+    existing_member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        func.lower(ProjectMember.email) == invitee_email,
+        ProjectMember.status == "active",
+    ).first()
+    if existing_member:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{invitee_email} is already an active member of this enclave.")
+
+    # Check if a pending invite already exists
+    existing_invite = db.query(ProjectInvitation).filter(
+        ProjectInvitation.project_id == project_id,
+        func.lower(ProjectInvitation.invitee_email) == invitee_email,
+        ProjectInvitation.status == "pending",
+    ).first()
+    if existing_invite:
+        return InvitationResponse(
+            id=existing_invite.id,
+            projectId=project.id,
+            projectName=project.name,
+            projectDescription=project.description,
+            defaultTlp=project.default_tlp,
+            inviterId=current_user.id,
+            inviterName=current_user.name or current_user.email,
+            inviterEmail=current_user.email,
+            inviteeEmail=target_user.email,
+            status=existing_invite.status,
+            createdAt=existing_invite.created_at.isoformat(),
+        )
+
+    invitation = ProjectInvitation(
+        id=f"inv_{uuid4().hex[:8]}",
+        project_id=project_id,
+        inviter_id=current_user.id,
+        invitee_email=target_user.email,
+        status="pending",
+    )
+    db.add(invitation)
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=project_id,
+        type="member",
+        actor=current_user.name or current_user.email,
+        detail=f"Dispatched collaboration invitation to {target_user.email}",
+    )
+    db.add(activity)
+
+    notifications_list.insert(0, {
+        "id": f"notif_{uuid4().hex[:8]}",
+        "title": "Enclave Collaboration Invitation",
+        "detail": f"You were invited by {current_user.name or current_user.email} to collaborate on {project.name} (TLP:{project.default_tlp}).",
+        "time": "Just now",
+        "read": False,
+    })
+
+    db.commit()
+    db.refresh(invitation)
+
+    return InvitationResponse(
+        id=invitation.id,
+        projectId=project.id,
+        projectName=project.name,
+        projectDescription=project.description,
+        defaultTlp=project.default_tlp,
+        inviterId=current_user.id,
+        inviterName=current_user.name or current_user.email,
+        inviterEmail=current_user.email,
+        inviteeEmail=target_user.email,
+        status=invitation.status,
+        createdAt=invitation.created_at.isoformat(),
+    )
+
+
+@app.get("/projects/{project_id}/invitations", response_model=list[InvitationResponse])
+def list_project_invitations(project_id: str, db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    invites = db.query(ProjectInvitation).filter(ProjectInvitation.project_id == project_id).order_by(ProjectInvitation.created_at.desc()).all()
+    out = []
+    for inv in invites:
+        inviter = db.query(User).filter(User.id == inv.inviter_id).first()
+        out.append(
+            InvitationResponse(
+                id=inv.id,
+                projectId=project.id,
+                projectName=project.name,
+                projectDescription=project.description,
+                defaultTlp=project.default_tlp,
+                inviterId=inv.inviter_id,
+                inviterName=inviter.name if inviter else "Enclave Supervisor",
+                inviterEmail=inviter.email if inviter else "",
+                inviteeEmail=inv.invitee_email,
+                status=inv.status,
+                createdAt=inv.created_at.isoformat(),
+            )
+        )
+    return out
+
+
+@app.get("/users/me/invitations/pending", response_model=list[InvitationResponse])
+def get_my_pending_invitations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    invites = (
+        db.query(ProjectInvitation)
+        .filter(
+            func.lower(ProjectInvitation.invitee_email) == current_user.email.lower(),
+            ProjectInvitation.status == "pending",
+        )
+        .order_by(ProjectInvitation.created_at.desc())
+        .all()
+    )
+    result = []
+    for inv in invites:
+        proj = db.query(Project).filter(Project.id == inv.project_id).first()
+        inviter = db.query(User).filter(User.id == inv.inviter_id).first()
+        result.append(
+            InvitationResponse(
+                id=inv.id,
+                projectId=inv.project_id,
+                projectName=proj.name if proj else "Research Enclave",
+                projectDescription=proj.description if proj else None,
+                defaultTlp=proj.default_tlp if proj else "AMBER",
+                inviterId=inv.inviter_id,
+                inviterName=inviter.name if inviter else "Enclave Supervisor",
+                inviterEmail=inviter.email if inviter else "",
+                inviteeEmail=inv.invitee_email,
+                status=inv.status,
+                createdAt=inv.created_at.isoformat(),
+            )
+        )
+    return result
+
+
+@app.post("/invitations/{invitation_id}/accept")
+def accept_project_invitation(
+    invitation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    invitation = db.query(ProjectInvitation).filter(ProjectInvitation.id == invitation_id).first()
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    invitation.status = "accepted"
+
+    # Add member or activate
+    existing_member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == invitation.project_id,
+        func.lower(ProjectMember.email) == current_user.email.lower(),
+    ).first()
+
+    if not existing_member:
+        member = ProjectMember(
+            id=f"member_{uuid4().hex[:8]}",
+            project_id=invitation.project_id,
+            name=current_user.name or current_user.email.split("@")[0].replace(".", " ").title(),
+            email=current_user.email,
+            role="Researcher",
+            department=current_user.department or "Collaborator",
+            status="active",
+        )
+        db.add(member)
+    else:
+        existing_member.status = "active"
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=invitation.project_id,
+        type="member",
+        actor=current_user.name or current_user.email,
+        detail=f"{current_user.name or current_user.email} accepted research invitation and joined the enclave",
+    )
+    db.add(activity)
+
+    db.commit()
+    return {"message": "Joined Project", "project_id": invitation.project_id}
+
+
+@app.post("/invitations/{invitation_id}/decline")
+def decline_project_invitation(
+    invitation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    invitation = db.query(ProjectInvitation).filter(ProjectInvitation.id == invitation_id).first()
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Invitation not found")
+
+    invitation.status = "declined"
+    db.commit()
+    return {"message": "Declined invitation", "project_id": invitation.project_id}
+
+
+@app.patch("/projects/{project_id}/members/{member_id}/role", response_model=MemberResponse)
+def change_member_role(
+    project_id: str,
+    member_id: str,
+    payload: ChangeMemberRoleRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        ProjectMember.id == member_id,
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    old_role = member.role
+    member.role = payload.role.strip()
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=project_id,
+        type="member",
+        actor=current_user.name or current_user.email,
+        detail=f"Updated access role for {member.email} from {old_role} to {member.role}",
+    )
+    db.add(activity)
+    db.commit()
+    db.refresh(member)
+
+    return MemberResponse(
+        id=member.id,
+        name=member.name,
+        email=member.email,
+        role=member.role,
+        department=member.department,
+        status=member.status,
+    )
+
+
+@app.post("/projects/{project_id}/leave")
+def leave_project(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        func.lower(ProjectMember.email) == current_user.email.lower(),
+        ProjectMember.status == "active",
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="You are not an active member of this enclave")
+
+    member.status = "revoked"
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=project_id,
+        type="member",
+        actor=current_user.name or current_user.email,
+        detail=f"{current_user.name or current_user.email} voluntarily left the research enclave",
+    )
+    db.add(activity)
+    db.commit()
+
+    return {"message": "Left project successfully"}
 
 
 # ---------------------------------------------------------------------------

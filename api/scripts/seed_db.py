@@ -1,11 +1,71 @@
 """Seed initial research enclave data into PostgreSQL."""
 from sqlalchemy import text
 from app.db import SessionLocal, engine
-from app.models import Project, ProjectMember, FileRecord, ActivityEvent
+from app.auth import pwd_context
+from app.models import Project, ProjectMember, FileRecord, ActivityEvent, User, ProjectInvitation
 
 def seed():
     with SessionLocal() as db:
-        # Check if already seeded
+        # Seed users if not already present
+        admin_user = db.query(User).filter(User.email == "admin@bayero.edu.ng").first()
+        if not admin_user:
+            admin = User(
+                id="admin_001",
+                email="admin@bayero.edu.ng",
+                hashed_password=pwd_context.hash("SeVRdemo2026!"),
+                role="system_admin",
+                name="System Administrator",
+                title="Prof",
+                edu_status="PI",
+                department="Center for Information Technology",
+                faculty="Computer Science & IT",
+                profile_completed=True,
+            )
+            researcher = User(
+                id="user_001",
+                email="researcher@bayero.edu.ng",
+                hashed_password=pwd_context.hash("SeVRdemo2026!"),
+                role="supervisor",
+                name="Dr. Ada Okafor",
+                title="Dr",
+                edu_status="Staff",
+                department="Environmental Sciences",
+                faculty="Faculty of Earth and Environmental Sciences",
+                profile_completed=True,
+            )
+            jamil = User(
+                id="user_002",
+                email="jamil@bayero.edu.ng",
+                hashed_password=pwd_context.hash("SeVRdemo2026!"),
+                role="researcher",
+                name="Jamil Yusuf",
+                title="Mr",
+                edu_status="Student",
+                student_cadre="Postgraduate",
+                student_level="MSc",
+                department="Environmental Sciences",
+                faculty="Faculty of Earth and Environmental Sciences",
+                profile_completed=True,
+            )
+            bello = User(
+                id="user_003",
+                email="bello@bayero.edu.ng",
+                hashed_password=pwd_context.hash("SeVRdemo2026!"),
+                role="researcher",
+                name="Bello Aminu",
+                title="Mr",
+                edu_status="Staff",
+                department="Genomics & Bioinformatics",
+                faculty="Faculty of Science",
+                profile_completed=True,
+            )
+            db.add_all([admin, researcher, jamil, bello])
+            db.commit()
+            print("Seeded default users (admin, researcher, jamil, bello).")
+        else:
+            print("Users already seeded.")
+
+        # Check if projects already seeded
         existing = db.query(Project).filter(Project.id == "proj_1").first()
         if existing:
             print("Database already contains seed projects.")

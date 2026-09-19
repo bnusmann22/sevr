@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 from functools import lru_cache
 
 import jwt
@@ -6,6 +8,33 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
 from .config import get_settings
+
+
+class PasswordHasher:
+    @staticmethod
+    def hash(password: str) -> str:
+        salt = secrets.token_hex(16)
+        h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100_000).hex()
+        return f"pbkdf2_sha256${salt}${h}"
+
+    @staticmethod
+    def verify(plain: str, hashed: str) -> bool:
+        try:
+            if not hashed:
+                return False
+            if "$" not in hashed:
+                return secrets.compare_digest(plain, hashed)
+            parts = hashed.split("$")
+            if len(parts) != 3 or parts[0] != "pbkdf2_sha256":
+                return False
+            salt, h = parts[1], parts[2]
+            expected = hashlib.pbkdf2_hmac("sha256", plain.encode("utf-8"), salt.encode("utf-8"), 100_000).hex()
+            return secrets.compare_digest(expected, h)
+        except Exception:
+            return False
+
+
+pwd_context = PasswordHasher()
 
 
 bearer_scheme = HTTPBearer(auto_error=False)

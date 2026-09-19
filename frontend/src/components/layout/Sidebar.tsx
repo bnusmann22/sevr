@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Folder, ShieldAlert, ScrollText, Upload, Share2 } from "lucide-react";
+import { Folder, ShieldAlert, ScrollText, Upload, Share2, Users } from "lucide-react";
 import Logo from "./Logo";
+import { readAuthSession } from "../../pages/LoginPage";
+import { projectsApi } from "../../api/services";
 
 type SidebarProps = {
   open: boolean;
@@ -9,13 +12,50 @@ type SidebarProps = {
 
 export default function Sidebar({ open, onClose }: SidebarProps) {
   const location = useLocation();
+  const session = readAuthSession();
+  const isAdmin = ["system_admin", "institution_admin"].includes(session?.role ?? "");
+  const [hasProjects, setHasProjects] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const checkProjects = async () => {
+      try {
+        const list = await projectsApi.list();
+        if (active) {
+          setHasProjects(Array.isArray(list) && list.length > 0);
+        }
+      } catch {
+        if (active) {
+          setHasProjects(false);
+        }
+      }
+    };
+
+    checkProjects();
+
+    const handler = () => checkProjects();
+    window.addEventListener("sevr:projects-changed", handler);
+    window.addEventListener("sevr:auth-success", handler);
+
+    return () => {
+      active = false;
+      window.removeEventListener("sevr:projects-changed", handler);
+      window.removeEventListener("sevr:auth-success", handler);
+    };
+  }, [location.pathname]);
 
   const navItems = [
     { path: "/home", label: "Projects", icon: Folder },
+    ...(isAdmin ? [{ path: "/admin/users", label: "User Directory", icon: Users }] : []),
     { path: "/upload", label: "Upload File", icon: Upload },
     { path: "/export", label: "Export & Share", icon: Share2 },
-    { path: "/alerts", label: "Detection Queue", icon: ShieldAlert },
-    { path: "/audit", label: "Audit Trail", icon: ScrollText },
+    ...(hasProjects
+      ? [
+          { path: "/alerts", label: "Detection Queue", icon: ShieldAlert },
+          { path: "/audit", label: "Audit Trail", icon: ScrollText },
+        ]
+      : []),
   ];
 
   return (

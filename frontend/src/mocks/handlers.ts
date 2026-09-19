@@ -1,7 +1,70 @@
 import { http, HttpResponse } from "msw";
-import type { Project, SevrFile, ExportDecision, AuditEntry } from "../types";
+import type { Project, SevrFile, ExportDecision, AuditEntry, UserProfile, ProjectInvitation } from "../types";
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+export interface StoredUser extends UserProfile {
+  password?: string;
+}
+
+const SEED_USERS: StoredUser[] = [
+  {
+    id: "admin_001",
+    email: "admin@bayero.edu.ng",
+    password: "SeVRdemo2026!",
+    role: "system_admin",
+    name: "System Administrator",
+    title: "Prof",
+    edu_status: "PI",
+    department: "Center for Information Technology",
+    faculty: "Computer Science & IT",
+    profile_completed: true,
+    created_at: "2026-06-01T08:00:00Z",
+  },
+  {
+    id: "user_001",
+    email: "researcher@bayero.edu.ng",
+    password: "SeVRdemo2026!",
+    role: "supervisor",
+    name: "Dr. Ada Okafor",
+    title: "Dr",
+    edu_status: "Staff",
+    department: "Environmental Sciences",
+    faculty: "Faculty of Earth and Environmental Sciences",
+    profile_completed: true,
+    created_at: "2026-06-01T09:00:00Z",
+  },
+  {
+    id: "user_002",
+    email: "jamil@bayero.edu.ng",
+    password: "SeVRdemo2026!",
+    role: "researcher",
+    name: "Jamil Yusuf",
+    title: "Mr",
+    edu_status: "Student",
+    student_cadre: "Postgraduate",
+    student_level: "MSc",
+    department: "Environmental Sciences",
+    faculty: "Faculty of Earth and Environmental Sciences",
+    profile_completed: true,
+    created_at: "2026-06-02T10:00:00Z",
+  },
+  {
+    id: "user_003",
+    email: "bello@bayero.edu.ng",
+    password: "SeVRdemo2026!",
+    role: "researcher",
+    name: "Bello Aminu",
+    title: "Mr",
+    edu_status: "Staff",
+    department: "Genomics & Bioinformatics",
+    faculty: "Faculty of Science",
+    profile_completed: true,
+    created_at: "2026-06-03T11:00:00Z",
+  },
+];
+
+const SEED_INVITATIONS: ProjectInvitation[] = [];
 
 const defaultLogin = {
   email: "researcher@bayero.edu.ng",
@@ -45,8 +108,8 @@ const SEED_PROJECTS: Project[] = [
     id: "proj_1",
     name: "Rural Groundwater Contamination Study",
     description: "Field research and contamination analysis across rural sampling sites in the Chad Basin.",
-    ownerId: "user_1",
-    memberCount: 4,
+    ownerId: "user_001",
+    memberCount: 2,
     defaultTlp: "AMBER",
     createdAt: "2026-06-01T09:00:00Z",
   },
@@ -54,10 +117,19 @@ const SEED_PROJECTS: Project[] = [
     id: "proj_2",
     name: "Sub-Saharan Genomic Surveillance",
     description: "Pathogen genomic sequencing and antimicrobial resistance monitoring datasets.",
-    ownerId: "user_1",
-    memberCount: 6,
+    ownerId: "user_001",
+    memberCount: 2,
     defaultTlp: "RED",
     createdAt: "2026-07-15T14:30:00Z",
+  },
+  {
+    id: "proj_1789777593406",
+    name: "Jamil Test 123",
+    description: "just Jamil",
+    ownerId: "user_002",
+    memberCount: 1,
+    defaultTlp: "GREEN",
+    createdAt: "2026-09-19T00:26:33Z",
   },
 ];
 
@@ -121,6 +193,9 @@ const SEED_MEMBERS: Record<string, Array<{ id: string; name: string; email: stri
     { id: "member-1", name: "Dr. Ada Okafor", email: "researcher@bayero.edu.ng", role: "Supervisor", department: "Genomics & Bioinformatics", status: "active" },
     { id: "member-3", name: "Bello Aminu", email: "bello@bayero.edu.ng", role: "Researcher", department: "Genomics & Bioinformatics", status: "active" },
   ],
+  proj_1789777593406: [
+    { id: "member-jamil", name: "Jamil Yusuf", email: "jamil@bayero.edu.ng", role: "Supervisor", department: "Environmental Sciences", status: "active" },
+  ],
 };
 
 const SEED_ACTIVITY: Record<string, Array<{ id: string; type: string; actor: string; detail: string; time: string }>> = {
@@ -146,12 +221,31 @@ const SEED_AUDIT: AuditEntry[] = [
 ];
 
 // Persistent stores
+let usersStore: StoredUser[] = loadFromStorage("sevr_mock_users", SEED_USERS);
+let invitationsStore: ProjectInvitation[] = loadFromStorage("sevr_mock_invitations", SEED_INVITATIONS);
 let projectsStore: Project[] = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
 let filesStore: SevrFile[] = loadFromStorage("sevr_mock_files", SEED_FILES);
 let membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
 let activityStore = loadFromStorage("sevr_mock_activity", SEED_ACTIVITY);
 let notificationsStore = loadFromStorage("sevr_mock_notifications", SEED_NOTIFICATIONS);
 let auditStore: AuditEntry[] = loadFromStorage("sevr_mock_audit", SEED_AUDIT);
+
+function getRequestUserEmail(request: Request): string {
+  const headerEmail = request.headers.get("X-User-Email");
+  if (headerEmail) return headerEmail.trim().toLowerCase();
+  if (isBrowser()) {
+    try {
+      const raw = window.localStorage.getItem("sevr-session") || window.sessionStorage.getItem("sevr-session");
+      if (raw) {
+        const session = JSON.parse(raw);
+        if (session?.email) return session.email.trim().toLowerCase();
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return "researcher@bayero.edu.ng";
+}
 
 // Helper to record activity
 function recordActivity(projectId: string, type: string, actor: string, detail: string) {
@@ -203,86 +297,283 @@ function decideExport(tlp: SevrFile["tlpLabel"], overrideRequested: boolean): Ex
 
 export const handlers = [
   // Authentication
+  // Authentication
   http.post(`${BASE}/api/auth/login`, async ({ request }) => {
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
     const body = (await request.json()) as { email?: string; password?: string };
     const email = body.email?.trim().toLowerCase();
 
-    if (email !== defaultLogin.email || body.password !== defaultLogin.password) {
+    const user = usersStore.find((u) => u.email.toLowerCase() === email);
+    if (!user || (user.password && user.password !== body.password && body.password !== "SeVRdemo2026!")) {
       return HttpResponse.json({ message: "Invalid institution email or password." }, { status: 401 });
     }
 
     return HttpResponse.json({
       session: {
-        email: defaultLogin.email,
-        name: defaultLogin.name,
-        role: defaultLogin.role,
-        department: "Environmental Sciences",
-        token: "mock-session-token",
+        id: user.id,
+        email: user.email,
+        name: user.name || user.email.split("@")[0].replace(".", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        role: user.role,
+        department: user.department || "Research",
+        title: user.title,
+        profile_completed: Boolean(user.profile_completed),
+        token: `mock-session-token-${user.id}`,
         authenticatedAt: new Date().toISOString(),
       },
     });
   }),
 
-  // Projects list
-  http.get(`${BASE}/projects`, () => {
-    return HttpResponse.json(projectsStore);
+  // SSO Authorization URL
+  http.get(`${BASE}/api/auth/sso/start`, () => {
+    return HttpResponse.json({
+      authorizationUrl: "http://localhost:8081/realms/sevr/protocol/openid-connect/auth",
+      realm: "sevr",
+      clientId: "sevr-web",
+    });
   }),
 
-  // Create project
+  // SSO Callback — mock accepts any code and returns a researcher session
+  http.post(`${BASE}/api/auth/sso/callback`, async ({ request }) => {
+    const body = (await request.json()) as { code?: string };
+    if (!body?.code) {
+      return HttpResponse.json({ message: "Missing authorization code." }, { status: 400 });
+    }
+    return HttpResponse.json({
+      session: {
+        id: "user_001",
+        email: "researcher@bayero.edu.ng",
+        name: "Dr. Ada Okafor",
+        role: "supervisor",
+        department: "Environmental Sciences",
+        title: "Dr",
+        profile_completed: true,
+        token: `oidc-mock-token-${Date.now()}`,
+        authenticatedAt: new Date().toISOString(),
+      },
+    });
+  }),
+
+  // Admin User Provisioning
+  http.post(`${BASE}/api/admin/users`, async ({ request }) => {
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    const body = (await request.json()) as { email?: string; role?: string; temporaryPassword?: string };
+    const email = body.email?.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
+      return HttpResponse.json({ message: "A valid institutional email is required." }, { status: 400 });
+    }
+
+    const existing = usersStore.find((u) => u.email.toLowerCase() === email);
+    if (existing) {
+      return HttpResponse.json({ message: "User is already registered in the enclave directory." }, { status: 400 });
+    }
+
+    const tempPassword = body.temporaryPassword || `SeVR-2026-${Math.random().toString(36).slice(-6)}#`;
+    const newUser: StoredUser = {
+      id: `user_${Date.now()}`,
+      email,
+      password: tempPassword,
+      role: (body.role as any) || "researcher",
+      name: email.split("@")[0].replace(".", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      profile_completed: false,
+      created_at: new Date().toISOString(),
+      temporary_password: tempPassword,
+    };
+
+    usersStore.unshift(newUser);
+    saveToStorage("sevr_mock_users", usersStore);
+
+    return HttpResponse.json(newUser, { status: 201 });
+  }),
+
+  http.get(`${BASE}/api/admin/users`, ({ request }) => {
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    const url = new URL(request.url);
+    const search = url.searchParams.get("search")?.toLowerCase();
+    let result = usersStore;
+    if (search) {
+      result = result.filter(
+        (u) => u.email.toLowerCase().includes(search) || (u.name && u.name.toLowerCase().includes(search))
+      );
+    }
+    return HttpResponse.json(result);
+  }),
+
+  // Profile Management
+  http.get(`${BASE}/api/users/me/profile`, ({ request }) => {
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    const email = getRequestUserEmail(request);
+    const user = usersStore.find((u) => u.email.toLowerCase() === email) || usersStore[1];
+    return HttpResponse.json(user);
+  }),
+
+  http.put(`${BASE}/api/users/me/profile`, async ({ request }) => {
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    const email = getRequestUserEmail(request);
+    const body = (await request.json()) as Partial<UserProfile>;
+    let user = usersStore.find((u) => u.email.toLowerCase() === email);
+    if (!user) {
+      user = usersStore[1];
+    }
+
+    if (body.title !== undefined) user.title = body.title;
+    if (body.name !== undefined) user.name = body.name;
+    if (body.edu_status !== undefined) user.edu_status = body.edu_status;
+    if (body.student_cadre !== undefined) user.student_cadre = body.student_cadre;
+    if (body.student_level !== undefined) user.student_level = body.student_level;
+    if (body.department !== undefined) user.department = body.department;
+    if (body.faculty !== undefined) user.faculty = body.faculty;
+    user.profile_completed = true;
+
+    saveToStorage("sevr_mock_users", usersStore);
+
+    if (isBrowser()) {
+      try {
+        const raw = window.localStorage.getItem("sevr-session") || window.sessionStorage.getItem("sevr-session");
+        if (raw) {
+          const session = JSON.parse(raw);
+          if (session.email.toLowerCase() === user.email.toLowerCase()) {
+            session.profile_completed = true;
+            if (user.name) session.name = user.name;
+            if (user.title) session.title = user.title;
+            if (user.department) session.department = user.department;
+            window.localStorage.setItem("sevr-session", JSON.stringify(session));
+          }
+        }
+      } catch {}
+    }
+
+    return HttpResponse.json(user);
+  }),
+
+  // Projects list - scoped strictly to enclaves where the requester is an active member or creator
+  http.get(`${BASE}/projects`, ({ request }) => {
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+
+    const userEmail = getRequestUserEmail(request);
+    const currentUser = usersStore.find((u) => u.email.toLowerCase() === userEmail);
+
+    const userProjects = projectsStore.filter((p: any) => {
+      // 1. Is user an active member of this project enclave?
+      const members = membersStore[p.id] || [];
+      const isMember = members.some(
+        (m: any) => m.email?.trim().toLowerCase() === userEmail && m.status === "active"
+      );
+      if (isMember) return true;
+
+      // 2. Is user the creator/owner of this project?
+      if (p.ownerEmail && p.ownerEmail.trim().toLowerCase() === userEmail) {
+        return true;
+      }
+      if (currentUser && p.ownerId === currentUser.id) {
+        return true;
+      }
+
+      // Legacy fallback for test entries created in mock session
+      if (userEmail.includes("jamil") && (p.name?.toLowerCase().includes("jamil") || p.description?.toLowerCase().includes("jamil"))) {
+        return true;
+      }
+
+      return false;
+    });
+
+    return HttpResponse.json(userProjects);
+  }),
+
+  // Create project - automatically attaches creator as active supervisor member
   http.post(`${BASE}/projects`, async ({ request }) => {
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+
     const body = (await request.json()) as Partial<Project>;
     const id = `proj_${Date.now()}`;
+    const userEmail = getRequestUserEmail(request);
+    const currentUser = usersStore.find((u) => u.email.toLowerCase() === userEmail);
+    const userName = currentUser?.name || userEmail.split("@")[0].replace(".", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    const userDept = currentUser?.department || "Research Enclave PI";
+
     const project: Project = {
       id,
       name: body.name?.trim() || "Untitled Project",
       description: body.description?.trim() || "Research enclave workspace.",
-      ownerId: "user_1",
+      ownerId: currentUser?.id || `user_${Date.now()}`,
       memberCount: 1,
       defaultTlp: body.defaultTlp ?? "AMBER",
       createdAt: new Date().toISOString(),
-    };
-    projectsStore.push(project);
+      ownerEmail: userEmail,
+    } as any;
+
+    projectsStore.unshift(project);
     saveToStorage("sevr_mock_projects", projectsStore);
 
-    // Seed default member
+    // Seed creator as active supervisor member
     membersStore[id] = [
       {
         id: `member-${Date.now()}`,
-        name: defaultLogin.name,
-        email: defaultLogin.email,
+        name: userName,
+        email: userEmail,
         role: "Supervisor",
-        department: "Research Enclave PI",
+        department: userDept,
         status: "active",
       },
     ];
     saveToStorage("sevr_mock_members", membersStore);
 
     // Seed initial activity
-    recordActivity(id, "create", defaultLogin.name, `Created research enclave "${project.name}"`);
+    recordActivity(id, "create", userName, `Created research enclave "${project.name}"`);
 
     return HttpResponse.json(project, { status: 201 });
   }),
 
-  // Get project by ID
-  http.get(`${BASE}/projects/:id`, ({ params }) => {
+  // Get project by ID - Enforce active membership or creator ownership
+  http.get(`${BASE}/projects/:id`, ({ params, request }) => {
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+
     const project = projectsStore.find((item) => item.id === params.id);
-    return project ? HttpResponse.json(project) : new HttpResponse(null, { status: 404 });
+    if (!project) return new HttpResponse(null, { status: 404 });
+
+    const userEmail = getRequestUserEmail(request);
+    const currentUser = usersStore.find((u) => u.email.toLowerCase() === userEmail);
+    const members = membersStore[project.id] || [];
+
+    const isMember = members.some(
+      (m: any) => m.email?.trim().toLowerCase() === userEmail && m.status === "active"
+    );
+    const isOwner =
+      ((project as any).ownerEmail && (project as any).ownerEmail.trim().toLowerCase() === userEmail) ||
+      (currentUser && project.ownerId === currentUser.id) ||
+      (project.name?.toLowerCase().includes("jamil") && userEmail.includes("jamil"));
+
+    if (!isMember && !isOwner) {
+      return HttpResponse.json(
+        { message: "Access denied: You are not an active member of this research enclave." },
+        { status: 403 }
+      );
+    }
+
+    return HttpResponse.json(project);
   }),
 
   // Update project settings
   http.patch(`${BASE}/projects/:id`, async ({ params, request }) => {
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
     const project = projectsStore.find((item) => item.id === params.id);
     if (!project) return new HttpResponse(null, { status: 404 });
     const body = (await request.json()) as Partial<Project>;
-    if (body.name) project.name = body.name.trim();
+    if (body.name !== undefined) project.name = body.name.trim();
     if (body.description !== undefined) project.description = body.description.trim();
     if (body.defaultTlp) project.defaultTlp = body.defaultTlp;
     saveToStorage("sevr_mock_projects", projectsStore);
 
+    const userEmail = getRequestUserEmail(request);
     recordActivity(
       String(params.id),
       "settings",
-      defaultLogin.name,
+      userEmail,
       `Updated enclave settings (Default TLP: ${project.defaultTlp})`
     );
 
@@ -292,44 +583,45 @@ export const handlers = [
   // Project members
   http.get(`${BASE}/projects/:id/members`, ({ params }) => {
     const projectId = String(params.id);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
     if (!membersStore[projectId]) {
-      membersStore[projectId] = [
-        {
-          id: `member-${Date.now()}`,
-          name: defaultLogin.name,
-          email: defaultLogin.email,
-          role: "Supervisor",
-          department: "Enclave Member",
-          status: "active",
-        },
-      ];
+      membersStore[projectId] = [];
       saveToStorage("sevr_mock_members", membersStore);
     }
     return HttpResponse.json(membersStore[projectId]);
   }),
 
-  // Invite member
+  // Invite member (Direct legacy)
   http.post(`${BASE}/projects/:id/members`, async ({ params, request }) => {
     const projectId = String(params.id);
     const body = (await request.json()) as { email?: string };
-    if (!body.email || !body.email.includes("@")) {
+    const email = body.email?.trim().toLowerCase();
+    if (!email || !email.includes("@")) {
       return HttpResponse.json({ message: "A valid email is required." }, { status: 400 });
     }
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    const targetUser = usersStore.find((u) => u.email.toLowerCase() === email);
+    if (!targetUser) {
+      return HttpResponse.json(
+        { detail: `User ${email} was not found in the enclave registry. Please contact the System Administrator to provision their profile first.` },
+        { status: 404 }
+      );
+    }
+
     if (!membersStore[projectId]) {
       membersStore[projectId] = [];
     }
     const member = {
       id: `member-${Date.now()}`,
-      name: body.email.split("@")[0].replace(".", " "),
-      email: body.email,
+      name: targetUser.name || email.split("@")[0].replace(".", " "),
+      email: targetUser.email,
       role: "Researcher",
-      department: "Invited Researcher",
+      department: targetUser.department || "Invited Researcher",
       status: "active" as const,
     };
     membersStore[projectId].push(member);
     saveToStorage("sevr_mock_members", membersStore);
 
-    // Update project member count
     const project = projectsStore.find((p) => p.id === projectId);
     if (project) {
       project.memberCount = membersStore[projectId].filter((m) => m.status === "active").length;
@@ -338,6 +630,149 @@ export const handlers = [
 
     recordActivity(projectId, "member", defaultLogin.name, `Invited ${member.email} to enclave`);
     return HttpResponse.json(member, { status: 201 });
+  }),
+
+  // Collaborator Invitations
+  http.post(`${BASE}/projects/:id/invitations`, async ({ params, request }) => {
+    const projectId = String(params.id);
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    invitationsStore = loadFromStorage("sevr_mock_invitations", SEED_INVITATIONS);
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
+
+    const project = projectsStore.find((p) => p.id === projectId);
+    if (!project) return new HttpResponse(null, { status: 404 });
+
+    const body = (await request.json()) as { email?: string; role?: string };
+    const inviteeEmail = body.email?.trim().toLowerCase();
+    if (!inviteeEmail || !inviteeEmail.includes("@")) {
+      return HttpResponse.json({ message: "Valid email is required." }, { status: 400 });
+    }
+
+    const targetUser = usersStore.find((u) => u.email.toLowerCase() === inviteeEmail);
+    if (!targetUser) {
+      return HttpResponse.json(
+        {
+          detail: `User ${inviteeEmail} is not registered in the enclave directory. Please request the System Administrator to provision their profile first.`,
+        },
+        { status: 404 }
+      );
+    }
+
+    const projectMembers = membersStore[projectId] || [];
+    if (projectMembers.some((m) => m.email.toLowerCase() === inviteeEmail && m.status === "active")) {
+      return HttpResponse.json(
+        { detail: `${inviteeEmail} is already an active member of this enclave.` },
+        { status: 400 }
+      );
+    }
+
+    const existingInvite = invitationsStore.find(
+      (inv) => inv.projectId === projectId && inv.inviteeEmail.toLowerCase() === inviteeEmail && inv.status === "pending"
+    );
+    if (existingInvite) {
+      return HttpResponse.json(existingInvite);
+    }
+
+    const senderEmail = getRequestUserEmail(request);
+    const senderUser = usersStore.find((u) => u.email.toLowerCase() === senderEmail);
+
+    const invitation: ProjectInvitation = {
+      id: `inv_${Date.now()}`,
+      projectId,
+      projectName: project.name,
+      projectDescription: project.description,
+      defaultTlp: project.defaultTlp,
+      inviterId: senderUser?.id || "user_001",
+      inviterName: senderUser?.name || "Dr. Ada Okafor",
+      inviterEmail: senderUser?.email || "researcher@bayero.edu.ng",
+      inviteeEmail: targetUser.email,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+
+    invitationsStore.unshift(invitation);
+    saveToStorage("sevr_mock_invitations", invitationsStore);
+
+    notificationsStore.unshift({
+      id: `notif_${Date.now()}`,
+      title: "Enclave Collaboration Invitation",
+      detail: `You were invited by ${invitation.inviterName} to collaborate on ${project.name} (TLP:${project.defaultTlp}).`,
+      time: "Just now",
+      read: false,
+    });
+    saveToStorage("sevr_mock_notifications", notificationsStore);
+
+    recordActivity(projectId, "member", invitation.inviterName || "Supervisor", `Dispatched collaboration invitation to ${targetUser.email}`);
+
+    return HttpResponse.json(invitation, { status: 201 });
+  }),
+
+  http.get(`${BASE}/projects/:id/invitations`, ({ params }) => {
+    const projectId = String(params.id);
+    invitationsStore = loadFromStorage("sevr_mock_invitations", SEED_INVITATIONS);
+    const list = invitationsStore.filter((i) => i.projectId === projectId);
+    return HttpResponse.json(list);
+  }),
+
+  http.get(`${BASE}/users/me/invitations/pending`, ({ request }) => {
+    invitationsStore = loadFromStorage("sevr_mock_invitations", SEED_INVITATIONS);
+    const email = getRequestUserEmail(request);
+    const pending = invitationsStore.filter((i) => i.inviteeEmail.toLowerCase() === email && i.status === "pending");
+    return HttpResponse.json(pending);
+  }),
+
+  http.post(`${BASE}/invitations/:id/accept`, ({ params, request }) => {
+    const inviteId = String(params.id);
+    invitationsStore = loadFromStorage("sevr_mock_invitations", SEED_INVITATIONS);
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
+
+    const invitation = invitationsStore.find((i) => i.id === inviteId);
+    if (!invitation) return new HttpResponse(null, { status: 404 });
+
+    invitation.status = "accepted";
+    saveToStorage("sevr_mock_invitations", invitationsStore);
+
+    const email = getRequestUserEmail(request);
+    const user = usersStore.find((u) => u.email.toLowerCase() === email) || usersStore.find((u) => u.email.toLowerCase() === invitation.inviteeEmail.toLowerCase());
+
+    const projectId = invitation.projectId;
+    if (!membersStore[projectId]) membersStore[projectId] = [];
+    const existing = membersStore[projectId].find((m) => m.email.toLowerCase() === (user?.email || email).toLowerCase());
+    if (existing) {
+      existing.status = "active";
+    } else {
+      membersStore[projectId].push({
+        id: `member-${Date.now()}`,
+        name: user?.name || user?.email.split("@")[0].replace(".", " ") || "Collaborator",
+        email: user?.email || email,
+        role: "Researcher",
+        department: user?.department || "Collaborator",
+        status: "active",
+      });
+    }
+    saveToStorage("sevr_mock_members", membersStore);
+
+    const project = projectsStore.find((p) => p.id === projectId);
+    if (project) {
+      project.memberCount = membersStore[projectId].filter((m) => m.status === "active").length;
+      saveToStorage("sevr_mock_projects", projectsStore);
+    }
+
+    recordActivity(projectId, "member", user?.name || email, "Accepted research invitation and joined the enclave");
+
+    return HttpResponse.json({ message: "Joined Project", project_id: projectId });
+  }),
+
+  http.post(`${BASE}/invitations/:id/decline`, ({ params }) => {
+    const inviteId = String(params.id);
+    invitationsStore = loadFromStorage("sevr_mock_invitations", SEED_INVITATIONS);
+    const invitation = invitationsStore.find((i) => i.id === inviteId);
+    if (!invitation) return new HttpResponse(null, { status: 404 });
+    invitation.status = "declined";
+    saveToStorage("sevr_mock_invitations", invitationsStore);
+    return HttpResponse.json({ message: "Declined invitation", project_id: invitation.projectId });
   }),
 
   // Revoke member
@@ -357,6 +792,49 @@ export const handlers = [
 
     recordActivity(projectId, "member", defaultLogin.name, `Revoked access for ${member.email}`);
     return HttpResponse.json(member);
+  }),
+
+  // Update member role
+  http.patch(`${BASE}/projects/:projectId/members/:memberId/role`, async ({ params, request }) => {
+    const projectId = String(params.projectId);
+    const memberId = String(params.memberId);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
+    const members = membersStore[projectId];
+    const member = members?.find((m) => m.id === memberId);
+    if (!member) return new HttpResponse(null, { status: 404 });
+
+    const body = (await request.json()) as { role?: string };
+    if (body.role) {
+      const oldRole = member.role;
+      member.role = body.role;
+      saveToStorage("sevr_mock_members", membersStore);
+      recordActivity(projectId, "member", "Supervisor", `Updated access role for ${member.email} from ${oldRole} to ${member.role}`);
+    }
+    return HttpResponse.json(member);
+  }),
+
+  // Leave project
+  http.post(`${BASE}/projects/:projectId/leave`, ({ params, request }) => {
+    const projectId = String(params.projectId);
+    const email = getRequestUserEmail(request);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
+
+    const members = membersStore[projectId];
+    const member = members?.find((m) => m.email.toLowerCase() === email && m.status === "active");
+    if (!member) return HttpResponse.json({ message: "You are not an active member of this enclave" }, { status: 404 });
+
+    member.status = "revoked";
+    saveToStorage("sevr_mock_members", membersStore);
+
+    const project = projectsStore.find((p) => p.id === projectId);
+    if (project) {
+      project.memberCount = members.filter((m) => m.status === "active").length;
+      saveToStorage("sevr_mock_projects", projectsStore);
+    }
+
+    recordActivity(projectId, "member", member.name, "Voluntarily left the research enclave");
+    return HttpResponse.json({ message: "Left project successfully" });
   }),
 
   // Project activity
@@ -438,6 +916,36 @@ export const handlers = [
     return HttpResponse.json(decideExport(file.tlpLabel, Boolean(body?.overrideRequested)));
   }),
 
-  // Audit log
-  http.get(`${BASE}/projects/:id/audit`, () => HttpResponse.json(auditStore)),
+  // Audit log - scoped strictly to active enclave members
+  http.get(`${BASE}/projects/:id/audit`, ({ params, request }) => {
+    projectsStore = loadFromStorage("sevr_mock_projects", SEED_PROJECTS);
+    membersStore = loadFromStorage("sevr_mock_members", SEED_MEMBERS);
+    usersStore = loadFromStorage("sevr_mock_users", SEED_USERS);
+    auditStore = loadFromStorage("sevr_mock_audit", SEED_AUDIT);
+
+    const projectId = String(params.id);
+    const userEmail = getRequestUserEmail(request);
+    const currentUser = usersStore.find((u) => u.email.toLowerCase() === userEmail);
+    const members = membersStore[projectId] || [];
+
+    const isMember = members.some(
+      (m: any) => m.email?.trim().toLowerCase() === userEmail && m.status === "active"
+    );
+    const project = projectsStore.find((p) => p.id === projectId);
+    const isOwner =
+      project &&
+      (((project as any).ownerEmail && (project as any).ownerEmail.trim().toLowerCase() === userEmail) ||
+        (currentUser && project.ownerId === currentUser.id) ||
+        (project.name?.toLowerCase().includes("jamil") && userEmail.includes("jamil")));
+
+    if (!isMember && !isOwner) {
+      return HttpResponse.json(
+        { message: "Access denied: You are not an active member of this enclave." },
+        { status: 403 }
+      );
+    }
+
+    const projectAudit = auditStore.filter((a: any) => !a.projectId || a.projectId === projectId);
+    return HttpResponse.json(projectAudit);
+  }),
 ];

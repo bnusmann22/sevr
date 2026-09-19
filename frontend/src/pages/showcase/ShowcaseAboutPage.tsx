@@ -182,15 +182,23 @@ export default function ShowcaseAboutPage() {
                   className="rounded-xl bg-slate-950 border border-slate-800 overflow-hidden transition"
                 >
                   <button
+                    id={`charter-header-${item.id}`}
+                    aria-expanded={isOpen}
+                    aria-controls={`charter-panel-${item.id}`}
                     onClick={() => setOpenAccordion(isOpen ? null : item.id)}
-                    className="w-full p-4 text-left font-bold text-xs sm:text-sm text-white flex items-center justify-between hover:bg-slate-900/80 transition"
+                    className="w-full p-4 text-left font-bold text-xs sm:text-sm text-white flex items-center justify-between hover:bg-slate-900/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 transition"
                   >
                     <span>{item.title}</span>
                     <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? "rotate-180 text-emerald-400" : ""}`} />
                   </button>
 
                   {isOpen && (
-                    <div className="p-4 pt-0 text-xs text-slate-300 font-sans leading-relaxed border-t border-slate-900">
+                    <div
+                      id={`charter-panel-${item.id}`}
+                      role="region"
+                      aria-labelledby={`charter-header-${item.id}`}
+                      className="p-4 pt-0 text-xs text-slate-300 font-sans leading-relaxed border-t border-slate-900"
+                    >
                       {item.content}
                     </div>
                   )}

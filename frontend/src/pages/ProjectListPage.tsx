@@ -41,6 +41,7 @@ export default function ProjectListPage() {
       const newProj = await projectsApi.create({ name, description, defaultTlp });
       setProjects((current) => [...current, newProj]);
       setCreateOpen(false);
+      window.dispatchEvent(new CustomEvent("sevr:projects-changed"));
     } catch {
       setError("Unable to create enclave. Please try again.");
     } finally {
@@ -90,6 +91,7 @@ export default function ProjectListPage() {
           </button>
           {canCreate ? (
             <button
+              id="create-project-btn"
               type="button"
               onClick={() => setCreateOpen(true)}
               className="flex items-center gap-2 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition"
