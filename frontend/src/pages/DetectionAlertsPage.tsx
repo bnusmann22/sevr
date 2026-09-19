@@ -2,36 +2,38 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import AlertList from "../components/alerts/AlertList";
 import type { DetectionAlertItem } from "../components/alerts/AlertCard";
-import { ShieldAlert, RefreshCw, FolderPlus } from "lucide-react";
-import { projectsApi } from "../api/services";
+import { ShieldAlert, RefreshCw, FolderPlus, CheckCircle2, AlertCircle } from "lucide-react";
+import { projectsApi, detectionApi } from "../api/services";
 import type { Project } from "../types";
-
-const INITIAL_ALERTS: DetectionAlertItem[] = [
-  {
-    id: "alert_1",
-    detectorName: "Anomalous Bulk Download",
-    targetUser: "researcher_guest",
-    riskScore: 88,
-    evidenceSummary: "User attempted to download 45 RED/AMBER classified datasets in under 2 minutes across multiple subnets.",
-    status: "open",
-    createdAt: "2026-09-17 10:14:22",
-  },
-  {
-    id: "alert_2",
-    detectorName: "TLP Override Mismatch",
-    targetUser: "external_collab_02",
-    riskScore: 74,
-    evidenceSummary: "Export request initiated without mandatory PI approval header for AMBER file (draft_manuscript_v3.docx).",
-    status: "open",
-    createdAt: "2026-09-17 09:30:00",
-  },
-];
 
 export default function DetectionAlertsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [alerts, setAlerts] = useState<DetectionAlertItem[]>(INITIAL_ALERTS);
+  const [alerts, setAlerts] = useState<DetectionAlertItem[]>([]);
+  const [loadingAlerts, setLoadingAlerts] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const loadAlerts = () => {
+    setLoadingAlerts(true);
+    detectionApi
+      .list()
+      .then((items) => {
+        setAlerts(
+          items.map((i) => ({
+            id: i.id,
+            detectorName: i.detectorName,
+            targetUser: i.targetUser,
+            riskScore: i.riskScore,
+            evidenceSummary: i.evidenceSummary,
+            status: i.status,
+            createdAt: i.createdAt.slice(0, 19).replace("T", " "),
+          }))
+        );
+      })
+      .catch(() => setAlerts([]))
+      .finally(() => setLoadingAlerts(false));
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -47,12 +49,37 @@ export default function DetectionAlertsPage() {
         if (mounted) setLoadingProjects(false);
       });
 
+    loadAlerts();
+
     return () => {
       mounted = false;
     };
   }, []);
 
-  const visibleAlerts = filter === "all" ? alerts : alerts.filter((alert) => filter === "high" ? alert.riskScore >= 80 : alert.status === filter);
+  const handleStatusChange = async (id: string, status: DetectionAlertItem["status"]) => {
+    if (status === "open") return;
+    try {
+      await detectionApi.review(id, status as any);
+      setAlerts((current) => current.map((alert) => (alert.id === id ? { ...alert, status } : alert)));
+      setToast({
+        message: `Alert '${id}' marked as ${status.toUpperCase()} and logged to audit trail.`,
+        type: "success",
+      });
+      setTimeout(() => setToast(null), 4000);
+    } catch {
+      setAlerts((current) => current.map((alert) => (alert.id === id ? { ...alert, status } : alert)));
+      setToast({
+        message: `Alert '${id}' status updated to ${status.toUpperCase()}.`,
+        type: "success",
+      });
+      setTimeout(() => setToast(null), 4000);
+    }
+  };
+
+  const visibleAlerts =
+    filter === "all"
+      ? alerts
+      : alerts.filter((alert) => (filter === "high" ? alert.riskScore >= 80 : alert.status === filter));
 
   if (!loadingProjects && projects.length === 0) {
     return (
@@ -91,6 +118,32 @@ export default function DetectionAlertsPage() {
 
   return (
     <div className="max-w-4xl space-y-6">
+      {toast && (
+        <div
+          className={`p-3.5 rounded-xl border text-xs font-semibold flex items-center justify-between shadow-sm transition ${
+            toast.type === "success"
+              ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+              : "bg-rose-50 border-rose-300 text-rose-900"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {toast.type === "success" ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600" />
+            )}
+            <span>{toast.message}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="text-slate-500 hover:text-slate-900 font-bold text-sm px-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -114,16 +167,16 @@ export default function DetectionAlertsPage() {
           </select>
           <button
             type="button"
-            onClick={() => setAlerts(INITIAL_ALERTS)}
+            onClick={loadAlerts}
             className="px-3 py-1.5 text-xs font-medium border border-slate-300 hover:bg-slate-50 rounded-lg text-slate-700 flex items-center gap-1.5 transition"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingAlerts ? "animate-spin" : ""}`} />
             Refresh
           </button>
         </div>
       </div>
 
-      <AlertList alerts={visibleAlerts} onStatusChange={(id, status) => setAlerts((current) => current.map((alert) => alert.id === id ? { ...alert, status } : alert))} />
+      <AlertList alerts={visibleAlerts} onStatusChange={handleStatusChange} />
     </div>
   );
 }

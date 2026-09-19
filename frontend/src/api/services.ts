@@ -243,3 +243,54 @@ export const notificationsApi = {
     return data;
   },
 };
+
+// ---------------------------------------------------------------------------
+// Detection Anomaly Queue API (Phase 5)
+// ---------------------------------------------------------------------------
+export interface AnomalyItem {
+  id: string;
+  projectId: string;
+  detectorName: string;
+  targetUser: string;
+  riskScore: number;
+  evidenceSummary: string;
+  status: "open" | "acknowledged" | "dismissed" | "escalated" | "approved";
+  createdAt: string;
+}
+
+export const detectionApi = {
+  async list(): Promise<AnomalyItem[]> {
+    const { data } = await apiClient.get<AnomalyItem[]>("/detection/anomalies");
+    return data;
+  },
+
+  async review(anomalyId: string, status: "approved" | "dismissed" | "acknowledged" | "escalated"): Promise<AnomalyItem> {
+    const { data } = await apiClient.post<AnomalyItem>(`/detection/anomalies/${anomalyId}/review`, { status });
+    return data;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Container Inspection & Verification API (Phase 5)
+// ---------------------------------------------------------------------------
+export interface SevrVerificationResult {
+  valid: boolean;
+  expired: boolean;
+  status: string;
+  header?: {
+    metadata?: Record<string, any>;
+    watermark?: Record<string, any>;
+    status?: Record<string, any>;
+  };
+}
+
+export const sevrInspectorApi = {
+  async verifyContainer(file: File): Promise<SevrVerificationResult> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const { data } = await apiClient.post<SevrVerificationResult>("/sevr/verify", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+  },
+};

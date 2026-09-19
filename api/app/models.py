@@ -125,3 +125,18 @@ class ShareToken(Base):
     file: Mapped["FileRecord"] = relationship("FileRecord", back_populates="share_tokens")
 
 
+class DetectionAnomaly(Base):
+    __tablename__ = "detection_anomalies"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    detector_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_user: Mapped[str] = mapped_column(String(100), nullable=False)
+    risk_score: Mapped[int] = mapped_column(Integer, nullable=False, default=50)
+    evidence_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")  # open, approved, dismissed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    project: Mapped["Project"] = relationship("Project")
+
+

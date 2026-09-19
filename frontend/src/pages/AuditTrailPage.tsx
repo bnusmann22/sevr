@@ -4,7 +4,8 @@ import { apiClient } from "../api/client";
 import { projectsApi } from "../api/services";
 import AuditEntryRow from "../components/audit/AuditEntryRow";
 import type { AuditEntry, Project } from "../types";
-import { ScrollText, ShieldCheck, RefreshCw, FolderPlus } from "lucide-react";
+import { ScrollText, ShieldCheck, RefreshCw, FolderPlus, FileCheck } from "lucide-react";
+import SevrInspectorModal from "../components/container/SevrInspectorModal";
 
 export default function AuditTrailPage() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -15,6 +16,7 @@ export default function AuditTrailPage() {
   const [error, setError] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [verificationFilter, setVerificationFilter] = useState("all");
+  const [showInspectorModal, setShowInspectorModal] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -131,6 +133,14 @@ export default function AuditTrailPage() {
           )}
           <button
             type="button"
+            onClick={() => setShowInspectorModal(true)}
+            className="px-3 py-1.5 text-xs font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-lg flex items-center gap-1.5 shadow-xs transition"
+          >
+            <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
+            Inspect .sevr Container
+          </button>
+          <button
+            type="button"
             onClick={() => loadAuditLogs(selectedProjectId)}
             className="px-3 py-1.5 text-xs font-medium border border-slate-300 hover:bg-slate-50 rounded-lg text-slate-700 flex items-center gap-1.5 transition"
           >
@@ -204,6 +214,8 @@ export default function AuditTrailPage() {
           </table>
         </div>
       </div>
+
+      <SevrInspectorModal isOpen={showInspectorModal} onClose={() => setShowInspectorModal(false)} />
     </div>
   );
 }

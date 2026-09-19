@@ -1100,5 +1100,49 @@ export const handlers = [
       },
     });
   }),
+
+  // Detection Anomalies Queue Handlers
+  http.get(`${BASE}/detection/anomalies`, () => {
+    let anomalies = loadFromStorage<any[]>("sevr_mock_anomalies", []);
+    if (!anomalies || anomalies.length === 0) {
+      anomalies = [
+        {
+          id: "alert_1",
+          projectId: "proj_1",
+          detectorName: "Anomalous Bulk Download",
+          targetUser: "researcher_guest",
+          riskScore: 88,
+          evidenceSummary: "User attempted to download 45 RED/AMBER classified datasets in under 2 minutes across multiple subnets.",
+          status: "open",
+          createdAt: new Date().toISOString().slice(0, 19).replace("T", " "),
+        },
+        {
+          id: "alert_2",
+          projectId: "proj_1",
+          detectorName: "TLP Override Mismatch",
+          targetUser: "external_collab_02",
+          riskScore: 74,
+          evidenceSummary: "Export request initiated without mandatory PI approval header for AMBER asset.",
+          status: "open",
+          createdAt: new Date().toISOString().slice(0, 19).replace("T", " "),
+        },
+      ];
+      saveToStorage("sevr_mock_anomalies", anomalies);
+    }
+    return HttpResponse.json(anomalies);
+  }),
+
+  http.post(`${BASE}/detection/anomalies/:id/review`, async ({ params, request }) => {
+    const { id } = params;
+    const body = (await request.json()) as { status: string };
+    const anomalies = loadFromStorage<any[]>("sevr_mock_anomalies", []);
+    const index = anomalies.findIndex((a) => a.id === id);
+    if (index !== -1) {
+      anomalies[index].status = body.status;
+      saveToStorage("sevr_mock_anomalies", anomalies);
+      return HttpResponse.json(anomalies[index]);
+    }
+    return HttpResponse.json({ detail: "Alert not found" }, { status: 404 });
+  }),
 ];
 

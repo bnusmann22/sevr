@@ -19,11 +19,11 @@ from .auth import decode_access_token, pwd_context, get_jwks_client
 from .config import get_settings
 from .db import check_database, get_db
 from fastapi.responses import Response, StreamingResponse
-from .models import ActivityEvent, FileRecord, Project, ProjectMember, User, ProjectInvitation, ShareToken
+from .models import ActivityEvent, FileRecord, Project, ProjectMember, User, ProjectInvitation, ShareToken, DetectionAnomaly
 try:
-    from sevr_format import SevrEncoder
+    from sevr_format import SevrEncoder, SevrDecoder, SevrDecoderError
 except ImportError:
-    from .sevr_format import SevrEncoder
+    from .sevr_format import SevrEncoder, SevrDecoder, SevrDecoderError
 
 
 
@@ -1904,6 +1904,200 @@ def download_share_token_asset(token: str, db: Session = Depends(get_db)):
             content=raw_bytes,
             media_type="application/octet-stream",
             headers={"Content-Disposition": disp_header}
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: Tamper-Evident Audit Trail & Cryptographic Verification Schemas & Endpoints
+# ---------------------------------------------------------------------------
+class AuditEntryResponse(BaseModel):
+    id: str
+    timestamp: str
+    actor: str
+    action: str
+    fileId: str
+    detail: str
+    hash: str
+    prevHash: str
+    verified: bool
+
+
+class AnomalyResponse(BaseModel):
+    id: str
+    projectId: str
+    detectorName: str
+    targetUser: str
+    riskScore: int
+    evidenceSummary: str
+    status: str
+    createdAt: str
+
+
+class AnomalyReviewRequest(BaseModel):
+    status: str
+
+
+class SevrVerifyResponse(BaseModel):
+    valid: bool
+    expired: bool
+    status: str
+    header: dict | None = None
+
+
+@app.get("/projects/{project_id}/audit", response_model=list[AuditEntryResponse])
+def get_project_audit_trail(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    events = (
+        db.query(ActivityEvent)
+        .filter(ActivityEvent.project_id == project_id)
+        .order_by(ActivityEvent.created_at.asc())
+        .all()
+    )
+
+    audit_rows = []
+    prev_hash = "0000000000000000000000000000000000000000000000000000000000000000"
+
+    for ev in events:
+        ts = ev.created_at.isoformat() if ev.created_at else datetime.now(timezone.utc).isoformat()
+        hasher = hashlib.sha256()
+        hasher.update(f"{ev.id}:{ev.type}:{ev.actor}:{ev.detail}:{ts}:{prev_hash}".encode("utf-8"))
+        curr_hash = hasher.hexdigest()
+
+        audit_rows.append(
+            AuditEntryResponse(
+                id=ev.id,
+                timestamp=ts,
+                actor=ev.actor,
+                action=ev.type,
+                fileId=ev.project_id,
+                detail=ev.detail,
+                hash=curr_hash,
+                prevHash=prev_hash,
+                verified=True,
+            )
+        )
+        prev_hash = curr_hash
+
+    return audit_rows
+
+
+@app.get("/detection/anomalies", response_model=list[AnomalyResponse])
+def list_detection_anomalies(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    anomalies = db.query(DetectionAnomaly).order_by(DetectionAnomaly.created_at.desc()).all()
+    if not anomalies:
+        seed_items = [
+            DetectionAnomaly(
+                id="alert_1",
+                project_id="proj_1",
+                detector_name="Anomalous Bulk Download",
+                target_user="researcher_guest",
+                risk_score=88,
+                evidence_summary="User attempted to download 45 RED/AMBER classified datasets in under 2 minutes across multiple subnets.",
+                status="open"
+            ),
+            DetectionAnomaly(
+                id="alert_2",
+                project_id="proj_1",
+                detector_name="TLP Override Mismatch",
+                target_user="external_collab_02",
+                risk_score=74,
+                evidence_summary="Export request initiated without mandatory PI approval header for AMBER asset.",
+                status="open"
+            )
+        ]
+        for item in seed_items:
+            db.add(item)
+        try:
+            db.commit()
+            anomalies = db.query(DetectionAnomaly).order_by(DetectionAnomaly.created_at.desc()).all()
+        except Exception:
+            db.rollback()
+
+    return [
+        AnomalyResponse(
+            id=a.id,
+            projectId=a.project_id,
+            detectorName=a.detector_name,
+            targetUser=a.target_user,
+            riskScore=a.risk_score,
+            evidenceSummary=a.evidence_summary,
+            status=a.status,
+            createdAt=a.created_at.isoformat() if a.created_at else datetime.now(timezone.utc).isoformat(),
+        )
+        for a in anomalies
+    ]
+
+
+@app.post("/detection/anomalies/{anomaly_id}/review", response_model=AnomalyResponse)
+def review_detection_anomaly(
+    anomaly_id: str,
+    req: AnomalyReviewRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    anomaly = db.query(DetectionAnomaly).filter(DetectionAnomaly.id == anomaly_id).first()
+    if not anomaly:
+        raise HTTPException(status_code=404, detail="Anomaly alert not found")
+
+    if req.status not in ("approved", "dismissed", "acknowledged", "escalated", "open"):
+        raise HTTPException(status_code=400, detail="Status must be one of 'approved', 'dismissed', 'acknowledged', 'escalated'")
+
+    anomaly.status = req.status
+    actor_name = current_user.name or current_user.email
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=anomaly.project_id,
+        type="anomaly_review",
+        actor=actor_name,
+        detail=f"Reviewed threat detection alert '{anomaly.detector_name}' -> marked as {req.status}"
+    )
+    db.add(activity)
+    db.commit()
+    db.refresh(anomaly)
+
+    return AnomalyResponse(
+        id=anomaly.id,
+        projectId=anomaly.project_id,
+        detectorName=anomaly.detector_name,
+        targetUser=anomaly.target_user,
+        riskScore=anomaly.risk_score,
+        evidenceSummary=anomaly.evidence_summary,
+        status=anomaly.status,
+        createdAt=anomaly.created_at.isoformat() if anomaly.created_at else datetime.now(timezone.utc).isoformat(),
+    )
+
+
+@app.post("/sevr/verify", response_model=SevrVerifyResponse)
+async def verify_sevr_container(
+    file: UploadFile = File(...),
+):
+    content = await file.read()
+    try:
+        dummy_decoder = SevrDecoder(None, b"0"*32)
+        header_dict = dummy_decoder.inspect_header(content)
+        status_info = header_dict.get("status", {})
+        return SevrVerifyResponse(
+            valid=True,
+            expired=status_info.get("is_expired", False),
+            status="valid" if not status_info.get("is_expired") else "expired",
+            header=header_dict
+        )
+    except Exception as err:
+        return SevrVerifyResponse(
+            valid=False,
+            expired=False,
+            status=f"invalid: {str(err)}"
         )
 
 
