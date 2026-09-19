@@ -57,11 +57,13 @@ export default function MemberList({ projectId }: { projectId: string }) {
     loadData();
   }, [projectId]);
 
+  const INSTITUTION_EMAIL_PATTERN = /^[^\s@]+@(?:[a-z0-9-]+\.)*(?:edu\.ng|edu)$/i;
+
   const invite = async (event: FormEvent) => {
     event.preventDefault();
     const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail.includes("@")) {
-      setWarningMessage("Enter a valid institutional email.");
+    if (!INSTITUTION_EMAIL_PATTERN.test(cleanEmail)) {
+      setWarningMessage("Only verified institutional email addresses (@*.edu.ng or @*.edu) are permitted.");
       return;
     }
 

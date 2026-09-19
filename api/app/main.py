@@ -1,8 +1,11 @@
 import hashlib
 import os
+import re
 import secrets
 from datetime import datetime
 from uuid import uuid4
+
+INSTITUTION_EMAIL_PATTERN = re.compile(r"^[^\s@]+@(?:[a-z0-9-]+\.)*(?:edu\.ng|edu)$", re.IGNORECASE)
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -226,6 +229,14 @@ def get_current_user(
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
 
 
+def require_supervisor_or_admin(user: User):
+    if user.role not in ("supervisor", "institution_admin", "system_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Supervisor or institutional administrator privileges required.",
+        )
+
+
 
 # ---------------------------------------------------------------------------
 # Health & Diagnostic Endpoints
@@ -276,10 +287,10 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
                     "authenticatedAt": datetime.now().isoformat(),
                 }
             }
-        raise HTTPException(status_code=401, detail="Invalid institution email or password.")
+        raise HTTPException(status_code=401, detail="Invalid credentials. Please re-check your institution email and password, then retry.")
 
     if not pwd_context.verify(payload.password, user.hashed_password) and payload.password != "SeVRdemo2026!":
-        raise HTTPException(status_code=401, detail="Invalid institution email or password.")
+        raise HTTPException(status_code=401, detail="Invalid credentials. Please re-check your institution email and password, then retry.")
 
     return {
         "session": {
@@ -747,7 +758,13 @@ def get_project(
 
 
 @app.patch("/projects/{project_id}", response_model=ProjectResponse)
-def update_project(project_id: str, payload: UpdateProjectRequest, db: Session = Depends(get_db)):
+def update_project(
+    project_id: str,
+    payload: UpdateProjectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_supervisor_or_admin(current_user)
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -759,11 +776,12 @@ def update_project(project_id: str, payload: UpdateProjectRequest, db: Session =
     if payload.defaultTlp:
         project.default_tlp = payload.defaultTlp
 
+    actor_name = current_user.name or current_user.email
     activity = ActivityEvent(
         id=f"act_{uuid4().hex[:8]}",
         project_id=project_id,
         type="settings",
-        actor="Dr. Ada Okafor",
+        actor=actor_name,
         detail=f"Updated enclave configuration (Default TLP: {project.default_tlp})",
     )
     db.add(activity)
@@ -785,7 +803,11 @@ def update_project(project_id: str, payload: UpdateProjectRequest, db: Session =
 # Project Members Endpoints
 # ---------------------------------------------------------------------------
 @app.get("/projects/{project_id}/members", response_model=list[MemberResponse])
-def list_members(project_id: str, db: Session = Depends(get_db)):
+def list_members(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
     return [
         MemberResponse(
@@ -801,29 +823,49 @@ def list_members(project_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/projects/{project_id}/members", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
-def invite_member(project_id: str, payload: InviteMemberRequest, db: Session = Depends(get_db)):
+def invite_member(
+    project_id: str,
+    payload: InviteMemberRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_supervisor_or_admin(current_user)
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    email = payload.email.strip()
-    name = email.split("@")[0].replace(".", " ").title()
+    email = payload.email.strip().lower()
+    if not INSTITUTION_EMAIL_PATTERN.match(email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only verified institutional email addresses (@*.edu.ng or @*.edu) are permitted.",
+        )
+
+    target_user = db.query(User).filter(func.lower(User.email) == email).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User {email} is not registered in the enclave directory. Please request the System Administrator to provision their profile first.",
+        )
+
+    name = target_user.name or email.split("@")[0].replace(".", " ").title()
     member = ProjectMember(
         id=f"member_{uuid4().hex[:8]}",
         project_id=project_id,
         name=name,
         email=email,
         role="Researcher",
-        department="Varsity Collaborator",
+        department=target_user.department or "Varsity Collaborator",
         status="active",
     )
     db.add(member)
 
+    actor_name = current_user.name or current_user.email
     activity = ActivityEvent(
         id=f"act_{uuid4().hex[:8]}",
         project_id=project_id,
         type="member",
-        actor="Dr. Ada Okafor",
+        actor=actor_name,
         detail=f"Granted research access to {email}",
     )
     db.add(activity)
@@ -842,7 +884,13 @@ def invite_member(project_id: str, payload: InviteMemberRequest, db: Session = D
 
 
 @app.post("/projects/{project_id}/members/{member_id}/revoke", response_model=MemberResponse)
-def revoke_member(project_id: str, member_id: str, db: Session = Depends(get_db)):
+def revoke_member(
+    project_id: str,
+    member_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    require_supervisor_or_admin(current_user)
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id, ProjectMember.id == member_id
     ).first()
@@ -851,11 +899,12 @@ def revoke_member(project_id: str, member_id: str, db: Session = Depends(get_db)
 
     member.status = "revoked"
 
+    actor_name = current_user.name or current_user.email
     activity = ActivityEvent(
         id=f"act_{uuid4().hex[:8]}",
         project_id=project_id,
         type="member",
-        actor="Dr. Ada Okafor",
+        actor=actor_name,
         detail=f"Revoked ABAC access credentials for {member.email}",
     )
     db.add(activity)
@@ -888,6 +937,12 @@ def create_project_invitation(
         raise HTTPException(status_code=404, detail="Project not found")
 
     invitee_email = payload.email.strip().lower()
+    if not INSTITUTION_EMAIL_PATTERN.match(invitee_email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only verified institutional email addresses (@*.edu.ng or @*.edu) are permitted.",
+        )
+
     target_user = db.query(User).filter(func.lower(User.email) == invitee_email).first()
     if not target_user:
         raise HTTPException(
@@ -970,7 +1025,11 @@ def create_project_invitation(
 
 
 @app.get("/projects/{project_id}/invitations", response_model=list[InvitationResponse])
-def list_project_invitations(project_id: str, db: Session = Depends(get_db)):
+def list_project_invitations(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -1165,7 +1224,11 @@ def leave_project(
 # Project Activity Endpoints
 # ---------------------------------------------------------------------------
 @app.get("/projects/{project_id}/activity", response_model=list[ActivityResponse])
-def list_activity(project_id: str, db: Session = Depends(get_db)):
+def list_activity(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     activities = (
         db.query(ActivityEvent)
         .filter(ActivityEvent.project_id == project_id)
@@ -1188,7 +1251,11 @@ def list_activity(project_id: str, db: Session = Depends(get_db)):
 # File Enclave Endpoints
 # ---------------------------------------------------------------------------
 @app.get("/projects/{project_id}/files", response_model=list[FileResponse])
-def list_files(project_id: str, db: Session = Depends(get_db)):
+def list_files(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     files = (
         db.query(FileRecord)
         .filter(FileRecord.project_id == project_id)
@@ -1213,7 +1280,12 @@ def list_files(project_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/projects/{project_id}/files/{file_id}", response_model=FileResponse)
-def get_file(project_id: str, file_id: str, db: Session = Depends(get_db)):
+def get_file(
+    project_id: str,
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     file = db.query(FileRecord).filter(
         FileRecord.project_id == project_id, FileRecord.id == file_id
     ).first()
@@ -1239,26 +1311,47 @@ async def upload_file(
     project_id: str,
     file: UploadFile = File(...),
     tlpLabel: str = Form("AMBER"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    content = await file.read()
-    checksum = hashlib.sha256(content).hexdigest()
-    size = len(content)
-    ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
+    hasher = hashlib.sha256()
+    size = 0
+    chunks = []
+    chunk_size = 1024 * 1024  # 1MB buffer chunks
 
+    while chunk := await file.read(chunk_size):
+        size += len(chunk)
+        if size > 500 * 1024 * 1024:  # 500MB max quota
+            raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File exceeds maximum allowed size (500MB)")
+        hasher.update(chunk)
+        chunks.append(chunk)
+
+    full_content = b"".join(chunks)
+    checksum = hasher.hexdigest()
+    ext = file.filename.split(".")[-1] if "." in file.filename else "bin"
+    remote_path = f"vault/{project_id}/{file.filename}"
+
+    # Stream to Nextcloud WebDAV Vault with graceful fallback if daemon is unreachable
+    try:
+        nc_client = NextcloudClient()
+        nc_client.upload(remote_path, full_content)
+    except Exception as nc_err:
+        print(f"[Vault Info] Nextcloud WebDAV upload skipped/offline: {nc_err}")
+
+    actor_name = current_user.name or current_user.email
     file_id = f"file_{uuid4().hex[:8]}"
     record = FileRecord(
         id=file_id,
         project_id=project_id,
         name=file.filename,
         original_format=ext,
-        storage_path=f"vault/{project_id}/{file.filename}",
+        storage_path=remote_path,
         tlp_label=tlpLabel,
-        uploaded_by="Dr. Ada Okafor",
+        uploaded_by=actor_name,
         size_bytes=size,
         checksum_sha256=checksum,
         version_count=1,
@@ -1269,7 +1362,7 @@ async def upload_file(
         id=f"act_{uuid4().hex[:8]}",
         project_id=project_id,
         type="upload",
-        actor="Dr. Ada Okafor",
+        actor=actor_name,
         detail=f'Ingested research asset "{file.filename}" (TLP:{tlpLabel})',
     )
     db.add(activity)
@@ -1295,36 +1388,84 @@ async def upload_file(
 # Policy Export Decision Gateway (FIRST TLP 2.0 Standard)
 # ---------------------------------------------------------------------------
 @app.post("/files/{file_id}/export", response_model=ExportDecisionResponse)
-def evaluate_export(file_id: str, req: ExportRequest = ExportRequest(), db: Session = Depends(get_db)):
+def evaluate_export(
+    file_id: str,
+    req: ExportRequest = ExportRequest(),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     file = db.query(FileRecord).filter(FileRecord.id == file_id).first()
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
     tlp = file.tlp_label
+    is_supervisor = current_user.role in ("supervisor", "institution_admin", "system_admin")
+
+    # FIRST TLP 2.0 Mandate: RED is a strict hard floor
     if tlp == "RED":
         return ExportDecisionResponse(
             outcome="sevr_container",
-            reason="RED-labelled files are strictly encapsulated in .sevr containers. Zero override permitted.",
+            reason="TLP:RED assets are strictly encapsulated in .sevr containers. Zero override permitted.",
             tlpLabelAtDecision=tlp,
             overrideApplied=False,
         )
-    if tlp in ("AMBER", "AMBER_STRICT"):
+
+    # FIRST TLP 2.0 Mandate: AMBER+STRICT confines data to recipient organization only
+    if tlp == "AMBER_STRICT":
         if req.overrideRequested:
+            if not is_supervisor:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Supervisor or Compliance Officer credentials required for TLP:AMBER+STRICT override",
+                )
+            actor_name = current_user.name or current_user.email
+            activity = ActivityEvent(
+                id=f"act_{uuid4().hex[:8]}",
+                project_id=file.project_id,
+                type="export_override",
+                actor=actor_name,
+                detail=f"Authorized egress exception for TLP:AMBER+STRICT asset {file.name}",
+            )
+            db.add(activity)
+            db.commit()
             return ExportDecisionResponse(
                 outcome="native",
-                reason="Supervisor override validated for native format egress window.",
+                reason="Supervisor override authorized for internal organization egress only under TLP:AMBER+STRICT.",
                 tlpLabelAtDecision=tlp,
                 overrideApplied=True,
             )
         return ExportDecisionResponse(
             outcome="sevr_container",
-            reason=f"{tlp}-labelled files require cryptographic .sevr container encryption by default.",
+            reason="TLP:AMBER+STRICT strictly confines data to recipient organization and requires container encryption.",
             tlpLabelAtDecision=tlp,
             overrideApplied=False,
         )
+
+    # Standard TLP:AMBER
+    if tlp == "AMBER":
+        if req.overrideRequested:
+            if not is_supervisor:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Supervisor privileges required for native export override",
+                )
+            return ExportDecisionResponse(
+                outcome="native",
+                reason="Supervisor approved native egress window.",
+                tlpLabelAtDecision=tlp,
+                overrideApplied=True,
+            )
+        return ExportDecisionResponse(
+            outcome="sevr_container",
+            reason="TLP:AMBER requires container encryption by default.",
+            tlpLabelAtDecision=tlp,
+            overrideApplied=False,
+        )
+
+    # TLP:CLEAR / TLP:GREEN
     return ExportDecisionResponse(
         outcome="native",
-        reason=f"{tlp}-labelled files export in native format by default.",
+        reason=f"TLP:{tlp} exports in native format by default.",
         tlpLabelAtDecision=tlp,
         overrideApplied=False,
     )

@@ -61,3 +61,21 @@ def decode_access_token(credentials: HTTPAuthorizationCredentials | None = Depen
         )
     except (jwt.PyJWTError, Exception) as error:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token") from error
+
+
+class RoleChecker:
+    def __init__(self, allowed_roles: list[str]):
+        self.allowed_roles = [r.lower() for r in allowed_roles]
+
+    def __call__(self, claims: dict = Depends(decode_access_token)) -> dict:
+        user_roles = [
+            r.lower()
+            for r in claims.get("realm_access", {}).get("roles", [])
+            + claims.get("resource_access", {}).get("sevr-api", {}).get("roles", [])
+        ]
+        if not any(role in user_roles for role in self.allowed_roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Principal lacks required institutional role authorization",
+            )
+        return claims

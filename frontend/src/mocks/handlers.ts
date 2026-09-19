@@ -272,7 +272,22 @@ function decideExport(tlp: SevrFile["tlpLabel"], overrideRequested: boolean): Ex
       overrideApplied: false,
     };
   }
-  if (tlp === "AMBER" || tlp === "AMBER_STRICT") {
+  if (tlp === "AMBER_STRICT") {
+    return overrideRequested
+      ? {
+          outcome: "native",
+          reason: "Supervisor override authorized for internal organization egress only under TLP:AMBER+STRICT.",
+          tlpLabelAtDecision: tlp,
+          overrideApplied: true,
+        }
+      : {
+          outcome: "sevr_container",
+          reason: "TLP:AMBER+STRICT strictly confines data to recipient organization and requires container encryption.",
+          tlpLabelAtDecision: tlp,
+          overrideApplied: false,
+        };
+  }
+  if (tlp === "AMBER") {
     return overrideRequested
       ? {
           outcome: "native",
@@ -282,7 +297,7 @@ function decideExport(tlp: SevrFile["tlpLabel"], overrideRequested: boolean): Ex
         }
       : {
           outcome: "sevr_container",
-          reason: `${tlp}-labelled files require .sevr container encryption by default.`,
+          reason: "TLP:AMBER-labelled files require .sevr container encryption by default.",
           tlpLabelAtDecision: tlp,
           overrideApplied: false,
         };

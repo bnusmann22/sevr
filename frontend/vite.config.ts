@@ -10,5 +10,16 @@ export default defineConfig({
     },
   },
   server: { port: 5173 },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          three: ["three", "@react-three/fiber", "@react-three/drei"],
+          vendor: ["react", "react-dom", "react-router-dom", "axios", "framer-motion", "lucide-react"],
+        },
+      },
+    },
+  },
 });
 

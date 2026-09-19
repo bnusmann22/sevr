@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import Shell from "./components/layout/Shell";
 import LoadingPage from "./components/layout/LoadingPage";
-import ShowcaseOverviewPage from "./pages/showcase/ShowcaseOverviewPage";
-import ShowcaseSecurityPage from "./pages/showcase/ShowcaseSecurityPage";
-import ShowcaseWorkflowsPage from "./pages/showcase/ShowcaseWorkflowsPage";
-import ShowcaseSevrPage from "./pages/showcase/ShowcaseSevrPage";
-import ShowcaseAboutPage from "./pages/showcase/ShowcaseAboutPage";
-import ShowcaseDocsPage from "./pages/showcase/ShowcaseDocsPage";
+
+// Dynamic Code Splitting for heavy 3D WebGL Track A Showcase pages
+const ShowcaseOverviewPage = lazy(() => import("./pages/showcase/ShowcaseOverviewPage"));
+const ShowcaseSecurityPage = lazy(() => import("./pages/showcase/ShowcaseSecurityPage"));
+const ShowcaseWorkflowsPage = lazy(() => import("./pages/showcase/ShowcaseWorkflowsPage"));
+const ShowcaseSevrPage = lazy(() => import("./pages/showcase/ShowcaseSevrPage"));
+const ShowcaseAboutPage = lazy(() => import("./pages/showcase/ShowcaseAboutPage"));
+const ShowcaseDocsPage = lazy(() => import("./pages/showcase/ShowcaseDocsPage"));
+
 import LoginPage, { isAuthenticated } from "./pages/LoginPage";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
 import UploadPage from "./pages/UploadPage";
@@ -18,6 +21,8 @@ import ProjectListPage from "./pages/ProjectListPage";
 import ExternalCollaboratorPage from "./pages/ExternalCollaboratorPage";
 import AuthStatusPage from "./pages/AuthStatusPage";
 import FileDetailPage from "./pages/FileDetailPage";
+import FilePreviewPage from "./pages/FilePreviewPage";
+import ReleaseReviewPage from "./pages/ReleaseReviewPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 
 function AppLoadingBoundary() {
@@ -46,33 +51,35 @@ function AppLoadingBoundary() {
 
   return (
     <>
-      <Routes>
-        {/* Track A: Public Showcase Website & Educational Portal */}
-        <Route path="/" element={<ShowcaseOverviewPage />} />
-        <Route path="/landing" element={<ShowcaseOverviewPage />} />
-        <Route path="/security" element={<ShowcaseSecurityPage />} />
-        <Route path="/landing/security" element={<ShowcaseSecurityPage />} />
-        <Route path="/workflows" element={<ShowcaseWorkflowsPage />} />
-        <Route path="/landing/workflows" element={<ShowcaseWorkflowsPage />} />
-        <Route path="/sevr" element={<ShowcaseSevrPage />} />
-        <Route path="/landing/sevr" element={<ShowcaseSevrPage />} />
-        <Route path="/about" element={<ShowcaseAboutPage />} />
-        <Route path="/landing/about" element={<ShowcaseAboutPage />} />
-        <Route path="/docs" element={<ShowcaseDocsPage />} />
-        <Route path="/landing/docs" element={<ShowcaseDocsPage />} />
-        <Route path="/privacy" element={<ShowcaseDocsPage />} />
-        <Route path="/terms" element={<ShowcaseDocsPage />} />
+      <Suspense fallback={<div className="fixed inset-0 z-[100]"><LoadingPage /></div>}>
+        <Routes>
+          {/* Track A: Public Showcase Website & Educational Portal */}
+          <Route path="/" element={<ShowcaseOverviewPage />} />
+          <Route path="/landing" element={<ShowcaseOverviewPage />} />
+          <Route path="/security" element={<ShowcaseSecurityPage />} />
+          <Route path="/landing/security" element={<ShowcaseSecurityPage />} />
+          <Route path="/workflows" element={<ShowcaseWorkflowsPage />} />
+          <Route path="/landing/workflows" element={<ShowcaseWorkflowsPage />} />
+          <Route path="/sevr" element={<ShowcaseSevrPage />} />
+          <Route path="/landing/sevr" element={<ShowcaseSevrPage />} />
+          <Route path="/about" element={<ShowcaseAboutPage />} />
+          <Route path="/landing/about" element={<ShowcaseAboutPage />} />
+          <Route path="/docs" element={<ShowcaseDocsPage />} />
+          <Route path="/landing/docs" element={<ShowcaseDocsPage />} />
+          <Route path="/privacy" element={<ShowcaseDocsPage />} />
+          <Route path="/terms" element={<ShowcaseDocsPage />} />
 
-        {/* Auth Gateway Boundary */}
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<LoginPage />} />
-        <Route path="/auth/callback" element={<AuthStatusPage mode="callback" />} />
-        <Route path="/auth/session-expired" element={<AuthStatusPage mode="expired" />} />
-        <Route path="/share/:token" element={<ExternalCollaboratorPage />} />
+          {/* Auth Gateway Boundary */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<LoginPage />} />
+          <Route path="/auth/callback" element={<AuthStatusPage mode="callback" />} />
+          <Route path="/auth/session-expired" element={<AuthStatusPage mode="expired" />} />
+          <Route path="/share/:token" element={<ExternalCollaboratorPage />} />
 
-        {/* Track B: Core Operational Platform (Authenticated Enclave Shell) */}
-        <Route path="/*" element={<ProtectedApp />} />
-      </Routes>
+          {/* Track B: Core Operational Platform (Authenticated Enclave Shell) */}
+          <Route path="/*" element={<ProtectedApp />} />
+        </Routes>
+      </Suspense>
       {isLoading && <div className="fixed inset-0 z-[100]"><LoadingPage /></div>}
     </>
   );
@@ -94,6 +101,8 @@ function ProtectedApp() {
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspace />} />
         <Route path="/projects/:projectId/files/:fileId" element={<FileDetailPage />} />
+        <Route path="/projects/:projectId/files/:fileId/preview" element={<FilePreviewPage />} />
+        <Route path="/projects/:projectId/files/:fileId/release" element={<ReleaseReviewPage />} />
         <Route path="/projects/:projectId/upload" element={<UploadPage />} />
         <Route path="/projects/:projectId/export" element={<ExportSharePage />} />
         <Route path="/upload" element={<UploadPage />} />

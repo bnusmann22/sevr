@@ -11,6 +11,8 @@ export const apiClient = axios.create({
 // Purge any legacy MSW localStorage sessions that contain mock tokens.
 // These are non-persistable and will fail auth against the real backend.
 (function purgeStaleSessions() {
+  // Only purge mock sessions when connecting to a live backend
+  if (import.meta.env.VITE_USE_MOCKS === "true") return;
   try {
     const stores = [window.localStorage, window.sessionStorage];
     for (const store of stores) {

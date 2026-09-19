@@ -4,7 +4,7 @@ import { filesApi, projectsApi } from "../api/services";
 import type { ExportDecision, Project, SevrFile } from "../types";
 import ExportOutcomeBanner from "../components/sharing/ExportOutcomeBanner";
 import ShareDialog from "../components/sharing/ShareDialog";
-import { Share2, Download, FileText, Folder, AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
+import { Share2, Download, FileText, Folder, AlertCircle, ArrowLeft, RefreshCw, Eye, ShieldAlert } from "lucide-react";
 import { readAuthSession } from "./LoginPage";
 
 export default function ExportSharePage() {
@@ -80,6 +80,16 @@ export default function ExportSharePage() {
       setEvaluating(false);
     }
   }
+
+  const handleOpenShare = () => {
+    if (!selectedFileId) return;
+    const isInspected = sessionStorage.getItem(`sevr_preview_confirmed_${selectedFileId}`) === "true";
+    if (!isInspected) {
+      setError("Mandatory Preview Gate: Institutional governance requires visual inspection and recipient watermarking before generating external share links. Please complete Mandatory Preview first.");
+      return;
+    }
+    setIsShareOpen(true);
+  };
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -191,6 +201,16 @@ export default function ExportSharePage() {
 
         {/* Evaluation Controls */}
         <div className="flex flex-wrap gap-3 pt-1">
+          {selectedProjectId && selectedFileId && (
+            <Link
+              to={`/projects/${selectedProjectId}/files/${selectedFileId}/preview`}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-lg transition flex items-center gap-2 shadow-xs"
+            >
+              <Eye className="w-4 h-4 text-emerald-100" />
+              <span>Mandatory Preview &amp; Watermark</span>
+            </Link>
+          )}
+
           <button
             onClick={requestExport}
             disabled={evaluating || !selectedFileId}
@@ -201,7 +221,7 @@ export default function ExportSharePage() {
           </button>
 
           <button
-            onClick={() => setIsShareOpen(true)}
+            onClick={handleOpenShare}
             disabled={!selectedFileId}
             className="px-4 py-2 border border-slate-300 hover:bg-slate-50 disabled:opacity-50 text-slate-700 font-semibold text-xs rounded-lg transition flex items-center gap-2"
           >

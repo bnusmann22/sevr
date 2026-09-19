@@ -10,6 +10,7 @@ import {
   EyeOff,
   Shield,
 } from "lucide-react";
+import axios from "axios";
 import { apiClient } from "../api/client";
 import Logo from "../components/layout/Logo";
 import { generateCodeVerifier, generateCodeChallenge, generateRandomState, storeOidcState } from "../utils/pkce";
@@ -165,10 +166,16 @@ export default function LoginPage() {
       );
       window.setTimeout(() => navigate(requestedDestination, { replace: true }), 600);
     } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : "Unable to verify your credentials. Please try again.";
+      let message = "Invalid credentials. Please re-check your email and password, then retry.";
+      if (axios.isAxiosError(error)) {
+        if (typeof error.response?.data?.detail === "string") {
+          message = error.response.data.detail;
+        } else if (error.response?.status === 401) {
+          message = "Invalid credentials. Please re-check your email and password, then retry.";
+        }
+      } else if (error instanceof Error && error.message && !error.message.includes("status code")) {
+        message = error.message;
+      }
       setError(message);
       setSuccess("");
     } finally {

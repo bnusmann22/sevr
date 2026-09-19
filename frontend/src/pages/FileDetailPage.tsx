@@ -12,6 +12,7 @@ import {
   RefreshCw,
   AlertCircle,
   Share2,
+  Eye,
 } from "lucide-react";
 import { filesApi } from "../api/services";
 import type { SevrFile } from "../types";
@@ -197,20 +198,19 @@ export default function FileDetailPage() {
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
           <Link
-            to={`/export?projectId=${projectId}&fileId=${file.id}`}
-            className="flex items-center gap-1.5 bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition"
+            to={`/projects/${projectId}/files/${file.id}/preview`}
+            className="flex items-center gap-2 bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition rounded-lg shadow-xs"
           >
-            <Share2 className="h-3.5 w-3.5 text-emerald-400" />
-            Evaluate Export Policy
+            <Eye className="h-4 w-4 text-emerald-100" />
+            <span>Mandatory Preview &amp; Watermark</span>
           </Link>
-          <button
-            type="button"
-            disabled
-            title="Preview and watermarking pipeline is delivered in Phase 3"
-            className="cursor-not-allowed bg-slate-100 border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-400"
+          <Link
+            to={`/projects/${projectId}/files/${file.id}/release`}
+            className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 transition rounded-lg"
           >
-            Watermark Preview (Phase 3)
-          </button>
+            <ShieldCheck className="h-4 w-4 text-emerald-400" />
+            <span>Release Evaluation Gate</span>
+          </Link>
         </div>
       </section>
     </div>
