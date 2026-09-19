@@ -915,6 +915,16 @@ export const handlers = [
       checksumSha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
       versionCount: 1,
     };
+    let fileText = "";
+    try {
+      fileText = await file.text();
+    } catch {
+      fileText = `[File Content for ${file.name}]`;
+    }
+    const contentsStore = loadFromStorage<Record<string, string>>("sevr_mock_file_contents", {});
+    contentsStore[created.id] = fileText;
+    saveToStorage("sevr_mock_file_contents", contentsStore);
+
     filesStore.unshift(created);
     saveToStorage("sevr_mock_files", filesStore);
 
@@ -922,6 +932,27 @@ export const handlers = [
 
     return HttpResponse.json(created, { status: 201 });
   }),
+
+  // File raw text content
+  http.get(`${BASE}/projects/:projectId/files/:fileId/content`, ({ params }) => {
+    const fileId = String(params.fileId);
+    filesStore = loadFromStorage("sevr_mock_files", SEED_FILES);
+    const file = filesStore.find((f) => f.id === fileId);
+    const contentsStore = loadFromStorage<Record<string, string>>("sevr_mock_file_contents", {});
+    let content = contentsStore[fileId];
+    if (!content && file) {
+      content = `PRIMARY RESEARCH DATASET — ${file.name}\n========================================\n` +
+        `Enclave File ID: ${file.id}\n` +
+        `Uploaded By: ${file.uploadedBy}\n` +
+        `Checksum SHA-256: ${file.checksumSha256 || "Verified"}\n` +
+        `TLP Classification: TLP:${file.tlpLabel}\n\n` +
+        `1. EXECUTIVE RESEARCH SUMMARY\n` +
+        `This research document represents primary empirical telemetry ingested into the varsity enclave.\n` +
+        `Longitudinal sampling was conducted across primary research sites in accordance with institutional zero-trust guidelines.`;
+    }
+    return HttpResponse.json({ content: content || "Empty Document", fileId });
+  }),
+
 
   // Export decision engine
   http.post(`${BASE}/files/:id/export`, async ({ params, request }) => {

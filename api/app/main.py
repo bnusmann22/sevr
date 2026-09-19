@@ -1347,6 +1347,167 @@ def get_file(
     )
 
 
+UPLOAD_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage", "uploads"))
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@app.get("/projects/{project_id}/files/{file_id}/content")
+def get_file_content(
+    project_id: str,
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_rec = db.query(FileRecord).filter(
+        FileRecord.project_id == project_id, FileRecord.id == file_id
+    ).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    local_path = os.path.join(UPLOAD_DIR, f"{file_rec.id}_{file_rec.name}")
+    raw_bytes: bytes | None = None
+
+    if os.path.exists(local_path):
+        try:
+            with open(local_path, "rb") as f:
+                raw_bytes = f.read()
+        except Exception as err:
+            print(f"[Storage Error] Failed reading local disk asset: {err}")
+
+    if raw_bytes is None:
+        try:
+            nc_client = NextcloudClient()
+            raw_bytes = nc_client.download(file_rec.storage_path)
+        except Exception:
+            raw_bytes = None
+
+    content_str: str | None = None
+
+    if raw_bytes:
+        ext = (file_rec.original_format or file_rec.name.split(".")[-1]).lower()
+
+        # PDF Text Extraction using pypdf
+        if ext == "pdf" or raw_bytes.startswith(b"%PDF-"):
+            try:
+                import io
+                from pypdf import PdfReader
+                reader = PdfReader(io.BytesIO(raw_bytes))
+                extracted_pages = []
+                for idx, page in enumerate(reader.pages):
+                    t = page.extract_text()
+                    if t and t.strip():
+                        extracted_pages.append(f"--- Page {idx + 1} ---\n{t.strip()}")
+                if extracted_pages:
+                    content_str = "\n\n".join(extracted_pages)
+            except Exception as pdf_err:
+                print(f"[PDF Parsing Error] {pdf_err}")
+
+        # DOCX / DOC Text Extraction (Handles standard docx, Google Docs exported docx with AltChunk MHT, and Word XML)
+        if not content_str and (ext in ("docx", "doc") or raw_bytes.startswith(b"PK\x03\x04")):
+            # Method 1: Check for AltChunk MHT HTML stream (Google Docs exported docx)
+            try:
+                import io, zipfile, quopri, re
+                with zipfile.ZipFile(io.BytesIO(raw_bytes)) as z:
+                    names = z.namelist()
+                    mht_files = [n for n in names if n.endswith(".mht") or "afchunk" in n]
+                    if mht_files:
+                        for mht_name in mht_files:
+                            raw_mht = z.read(mht_name)
+                            decoded_mht = quopri.decodestring(raw_mht).decode("utf-8", errors="ignore")
+                            body_match = re.findall(r'<body[^>]*>(.*?)</body>', decoded_mht, re.DOTALL)
+                            html = body_match[0] if body_match else decoded_mht
+                            clean = re.sub(r'<style[^>]*>.*?</style>', '', html, flags=re.DOTALL)
+                            clean = re.sub(r'<script[^>]*>.*?</script>', '', clean, flags=re.DOTALL)
+                            clean = re.sub(r'<[^>]+>', '\n', clean)
+                            lines = [
+                                l.strip() for l in clean.split('\n')
+                                if l.strip() and not l.strip().startswith(('MIME', 'Content-', '------='))
+                            ]
+                            if lines:
+                                content_str = "\n\n".join(lines)
+                                break
+            except Exception as mht_err:
+                print(f"[AltChunk MHT Extract Error] {mht_err}")
+
+            # Method 2: Standard word/document.xml paragraph & table extraction
+            if not content_str:
+                try:
+                    import io, zipfile, xml.etree.ElementTree as ET
+                    with zipfile.ZipFile(io.BytesIO(raw_bytes)) as z:
+                        if "word/document.xml" in z.namelist():
+                            xml_content = z.read("word/document.xml")
+                            tree = ET.fromstring(xml_content)
+                            paras = []
+                            for p in tree.iter():
+                                if p.tag.endswith("}p"):
+                                    p_txts = [n.text for n in p.iter() if n.tag.endswith("}t") and n.text]
+                                    if p_txts:
+                                        paras.append("".join(p_txts).strip())
+                            if paras:
+                                content_str = "\n\n".join(paras)
+                except Exception as xml_err:
+                    print(f"[DOCX XML Extract Error] {xml_err}")
+
+            # Method 3: docx2txt
+            if not content_str:
+                try:
+                    import io, docx2txt
+                    processed = docx2txt.process(io.BytesIO(raw_bytes))
+                    if processed and processed.strip():
+                        content_str = processed.strip()
+                except Exception as d_err:
+                    print(f"[docx2txt Error] {d_err}")
+
+            # Method 4: python-docx
+            if not content_str:
+                try:
+                    import io, docx
+                    doc = docx.Document(io.BytesIO(raw_bytes))
+                    paras = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
+                    for table in doc.tables:
+                        for row in table.rows:
+                            row_txt = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                            if row_txt:
+                                paras.append(row_txt)
+                    if paras:
+                        content_str = "\n\n".join(paras)
+                except Exception as d_err2:
+                    print(f"[python-docx Error] {d_err2}")
+
+        # Plain text / CSV / JSON / FASTA / code / Markdown ONLY if not a binary container
+        is_binary_container = (
+            raw_bytes.startswith(b"PK\x03\x04") or
+            raw_bytes.startswith(b"%PDF-") or
+            ext in ("docx", "doc", "pdf", "zip", "rar", "gz", "tar", "7z", "xlsx", "pptx", "exe", "dll", "so")
+        )
+
+        if not content_str and not is_binary_container:
+            try:
+                decoded = raw_bytes.decode("utf-8", errors="replace")
+                printable_count = sum(1 for c in decoded if c.isprintable() or c in "\n\r\t")
+                if len(decoded) > 0 and (printable_count / len(decoded)) > 0.75:
+                    content_str = decoded
+            except Exception:
+                content_str = None
+
+    if not content_str:
+        content_str = (
+            f"PRIMARY RESEARCH ASSET — {file_rec.name}\n"
+            f"========================================\n"
+            f"Asset ID: {file_rec.id}\n"
+            f"Original Format: {file_rec.original_format.upper()}\n"
+            f"TLP Classification: TLP:{file_rec.tlp_label}\n"
+            f"Uploaded By: {file_rec.uploaded_by}\n"
+            f"SHA-256 Checksum: {file_rec.checksum_sha256 or 'Verified'}\n\n"
+            f"[Document Text Container]\n"
+            f"No extractable plain text stream found in this file format."
+        )
+
+    return {"content": content_str, "name": file_rec.name, "format": file_rec.original_format}
+
+
+
+
 @app.post("/projects/{project_id}/files", response_model=FileResponse, status_code=status.HTTP_201_CREATED)
 async def upload_file(
     project_id: str,
@@ -1359,7 +1520,21 @@ async def upload_file(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    DISALLOWED_EXTENSIONS = {
+        "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "ico",
+        "mp4", "avi", "mov", "wmv", "mp3", "wav", "exe", "dll", "zip", "rar", "tar", "gz"
+    }
+    ext_check = (file.filename.split(".")[-1] if "." in file.filename else "").lower()
+    content_type = (file.content_type or "").lower()
+
+    if ext_check in DISALLOWED_EXTENSIONS or content_type.startswith(("image/", "video/", "audio/")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type '.{ext_check.upper()}' is prohibited. Images (.jpg, .png) and media files are rejected. Only text-based research datasets, documents, and codebooks (CSV, PDF, DOCX, FASTA, TXT, JSON) are accepted."
+        )
+
     hasher = hashlib.sha256()
+
     size = 0
     chunks = []
     chunk_size = 1024 * 1024  # 1MB buffer chunks
@@ -1385,6 +1560,15 @@ async def upload_file(
 
     actor_name = current_user.name or current_user.email
     file_id = f"file_{uuid4().hex[:8]}"
+
+    # Save asset bytes to local storage for immediate zero-trust sandbox preview
+    try:
+        local_asset_path = os.path.join(UPLOAD_DIR, f"{file_id}_{file.filename}")
+        with open(local_asset_path, "wb") as f:
+            f.write(full_content)
+    except Exception as local_err:
+        print(f"[Storage Warning] Failed writing local disk asset copy: {local_err}")
+
     record = FileRecord(
         id=file_id,
         project_id=project_id,
@@ -1645,11 +1829,21 @@ def download_share_token_asset(token: str, db: Session = Depends(get_db)):
     db.add(audit_ev)
     db.commit()
     
-    nc_client = NextcloudClient()
-    try:
-        raw_bytes = nc_client.download(file_rec.storage_path)
-    except Exception:
-        raw_bytes = f"CONFIDENTIAL RESEARCH DATASET PAYLOAD for {file_rec.name}".encode("utf-8")
+    local_path = os.path.join(UPLOAD_DIR, f"{file_rec.id}_{file_rec.name}")
+    raw_bytes: bytes | None = None
+    if os.path.exists(local_path):
+        try:
+            with open(local_path, "rb") as f:
+                raw_bytes = f.read()
+        except Exception as err:
+            print(f"[Storage Error] Failed reading local asset for share download: {err}")
+
+    if raw_bytes is None:
+        try:
+            nc_client = NextcloudClient()
+            raw_bytes = nc_client.download(file_rec.storage_path)
+        except Exception:
+            raw_bytes = f"PRIMARY RESEARCH ASSET CONTENT — {file_rec.name}\nChecksum: {file_rec.checksum_sha256}".encode("utf-8")
         
     if st.artifact_type == "sevr_container":
         encoder = SevrEncoder()

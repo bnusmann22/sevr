@@ -84,6 +84,13 @@ export const filesApi = {
     return data;
   },
 
+
+  async getContent(projectId: string, fileId: string): Promise<{ content: string }> {
+    const { data } = await apiClient.get<{ content: string }>(`/projects/${projectId}/files/${fileId}/content`);
+    return data;
+  },
+
+
   async upload(projectId: string, formData: FormData): Promise<SevrFile> {
     const { data } = await apiClient.post<SevrFile>(
       `/projects/${projectId}/files`,

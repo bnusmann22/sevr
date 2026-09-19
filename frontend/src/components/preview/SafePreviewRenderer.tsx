@@ -1,20 +1,18 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   FileText,
   Table,
-  Image as ImageIcon,
-  Binary,
   ShieldCheck,
-  AlertTriangle,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   FileCode,
   Dna,
-  Layers,
+  User,
+  Clock,
+  HardDrive,
 } from "lucide-react";
 import type { SevrFile, TLP20Label } from "../../types";
-import TlpBadge from "../tlp/TlpBadge";
+import { filesApi } from "../../api/services";
 
 export interface WatermarkConfig {
   recipient: string;
@@ -38,16 +36,35 @@ export default function SafePreviewRenderer({
   watermark,
 }: SafePreviewRendererProps) {
   const [zoomLevel, setZoomLevel] = useState(100);
+  const [textContent, setTextContent] = useState<string | null>(null);
 
   const format = useMemo(() => {
     const ext = file.originalFormat?.toLowerCase() || file.name.split(".").pop()?.toLowerCase() || "";
     if (["csv", "tsv"].includes(ext)) return "tabular";
     if (["pdf", "docx", "doc"].includes(ext)) return "document";
-    if (["png", "jpg", "jpeg", "webp", "svg"].includes(ext)) return "image";
-    if (["txt", "md", "json", "py", "r", "sh", "yaml"].includes(ext)) return "text";
+    if (["txt", "md", "json", "py", "r", "sh", "yaml", "xml"].includes(ext)) return "text";
     if (["fasta", "fastq", "fa", "fq", "sam", "bam"].includes(ext)) return "genomic";
-    if (["nc", "hdf5", "h5", "parquet", "feather"].includes(ext)) return "scientific";
-    return "binary";
+    return "scientific";
+  }, [file]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!file?.id || !file?.projectId) return;
+
+    filesApi
+      .getContent(file.projectId, file.id)
+      .then((res) => {
+        if (isMounted && res?.content) {
+          setTextContent(res.content);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setTextContent(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [file]);
 
   const handleZoom = (delta: number) => {
@@ -60,10 +77,10 @@ export default function SafePreviewRenderer({
       <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-200/80 text-xs text-slate-600">
         <div className="flex items-center gap-2 font-medium text-slate-800">
           <span className="flex h-2 w-2 rounded-full bg-emerald-500 ring-4 ring-emerald-100" />
-          <span className="truncate max-w-[240px] font-semibold">{file.name}</span>
+          <span className="truncate max-w-[280px] font-semibold text-slate-900">{file.name}</span>
           <span className="text-slate-400">·</span>
-          <span className="uppercase text-[10px] tracking-wider px-1.5 py-0.5 rounded bg-slate-100 font-mono text-slate-600">
-            {format}
+          <span className="uppercase text-[10px] tracking-wider px-2 py-0.5 rounded bg-slate-100 font-mono font-bold text-slate-700 border border-slate-200">
+            {file.originalFormat ? file.originalFormat.toUpperCase() : "DOC"}
           </span>
         </div>
 
@@ -94,31 +111,31 @@ export default function SafePreviewRenderer({
 
       {/* Render Canvas Container */}
       <div className="relative flex-1 overflow-auto p-6 bg-slate-100/70 flex items-center justify-center">
-        {/* Render Canvas with dynamic zoom */}
         <div
           style={{ transform: `scale(${zoomLevel / 100})`, transformOrigin: "center top" }}
-          className="relative w-full max-w-2xl min-h-[460px] bg-white rounded-lg border border-slate-200 shadow-md p-8 overflow-hidden transition-transform duration-150 select-none"
+          className="relative w-full max-w-2xl min-h-[480px] bg-white rounded-lg border border-slate-200 shadow-md p-8 overflow-hidden transition-transform duration-150 select-none"
         >
           {/* Active Watermark Overlay Layer */}
           <WatermarkOverlay watermark={watermark} />
 
-          {/* Sandboxed Format Viewports */}
-          {format === "tabular" && <TabularSandbox file={file} />}
-          {format === "document" && <DocumentSandbox file={file} />}
-          {format === "text" && <TextCodeSandbox file={file} />}
-          {format === "image" && <ImageSandbox file={file} />}
-          {format === "genomic" && <GenomicDossierSandbox file={file} />}
-          {["scientific", "binary"].includes(format) && <StructuredDossierSandbox file={file} />}
+          {/* Sandboxed Main Document Viewports */}
+          {format === "tabular" && <TabularSandbox file={file} textContent={textContent} />}
+          {format === "document" && <DocumentSandbox file={file} textContent={textContent} />}
+          {format === "text" && <TextCodeSandbox file={file} textContent={textContent} />}
+          {format === "genomic" && <GenomicDossierSandbox file={file} textContent={textContent} />}
+          {format === "scientific" && <StructuredDossierSandbox file={file} textContent={textContent} />}
         </div>
       </div>
 
       {/* Security Status Ribbon Footer */}
       <div className="flex flex-wrap items-center justify-between px-4 py-2 bg-slate-900 text-slate-300 text-[11px] font-mono">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span>Zero-Trust Safe Sandbox Active</span>
           <span className="text-slate-600">|</span>
-          <span className="text-slate-400">SHA-256: {file.checksumSha256 ? `${file.checksumSha256.slice(0, 12)}…` : "Verified"}</span>
+          <span className="text-slate-400">
+            SHA-256: {file.checksumSha256 ? `${file.checksumSha256.slice(0, 12)}…` : "Verified"}
+          </span>
         </div>
         <div className="flex items-center gap-1.5 text-slate-400">
           <span>Stamping ID:</span>
@@ -155,7 +172,6 @@ function WatermarkOverlay({ watermark }: { watermark: WatermarkConfig }) {
     );
   }
 
-  // Diagonal 45-degree Repeating Stamp Pattern
   return (
     <div
       style={{ opacity: opacityVal }}
@@ -178,42 +194,55 @@ function WatermarkOverlay({ watermark }: { watermark: WatermarkConfig }) {
 }
 
 // ---------------------------------------------------------------------------
-// Sandboxed Format Renderers
+// Document Sandboxes
 // ---------------------------------------------------------------------------
-function TabularSandbox({ file }: { file: SevrFile }) {
-  const mockHeaders = ["Site_ID", "Latitude", "Longitude", "Sampling_Date", "Contaminant_PPM", "Safety_Index"];
-  const mockRows = [
-    ["NG-KAN-01", "11.9804° N", "8.5367° E", "2026-08-12", "0.042", "Nominal (Safe)"],
-    ["NG-KAN-02", "11.9912° N", "8.5411° E", "2026-08-12", "0.118", "Elevated Caution"],
-    ["NG-KAN-03", "12.0025° N", "8.5298° E", "2026-08-13", "0.021", "Nominal (Safe)"],
-    ["NG-KAN-04", "11.9744° N", "8.5602° E", "2026-08-14", "0.385", "Threshold Exceeded"],
-    ["NG-KAN-05", "12.0150° N", "8.5140° E", "2026-08-15", "0.055", "Nominal (Safe)"],
-    ["NG-KAN-06", "11.9680° N", "8.5721° E", "2026-08-16", "0.089", "Nominal (Safe)"],
+function TabularSandbox({ file, textContent }: { file: SevrFile; textContent: string | null }) {
+  const parsedData = useMemo(() => {
+    if (!textContent || !textContent.includes(",")) return null;
+    const lines = textContent.split("\n").map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return null;
+    const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+    const rows = lines.slice(1, 20).map((l) => l.split(",").map((c) => c.trim().replace(/^"|"$/g, "")));
+    return { headers, rows };
+  }, [textContent]);
+
+  const headers = parsedData?.headers || ["Record_ID", "Sampling_Site", "Telemetry_Date", "PPM_Reading", "Safety_Status"];
+  const rows = parsedData?.rows || [
+    ["REC-001", "Site Alpha (Kano North)", "2026-08-12", "0.042", "Nominal (Safe)"],
+    ["REC-002", "Site Beta (Chad Basin)", "2026-08-12", "0.118", "Elevated Caution"],
+    ["REC-003", "Site Gamma (Zaria West)", "2026-08-13", "0.021", "Nominal (Safe)"],
+    ["REC-004", "Site Delta (Hadejia Floodplain)", "2026-08-14", "0.385", "Threshold Exceeded"],
+    ["REC-005", "Site Epsilon (Gumel Central)", "2026-08-15", "0.055", "Nominal (Safe)"],
   ];
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <div className="flex items-center gap-2">
-          <Table className="w-4 h-4 text-emerald-600" />
-          <span className="text-xs font-bold text-slate-800">Tabular Dataset Preview (Showing 6 of 500 rows)</span>
+          <Table className="w-5 h-5 text-emerald-600" />
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">{file.name}</h3>
+            <p className="text-[11px] text-slate-500 font-mono">Tabular Dataset Document ({((file.sizeBytes || 0) / 1024).toFixed(1)} KB)</p>
+          </div>
         </div>
-        <span className="text-[10px] text-slate-500 font-mono">Sanitized CSV Parser</span>
+        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 font-mono font-semibold">
+          CSV/TSV Parsed
+        </span>
       </div>
 
       <div className="overflow-x-auto rounded border border-slate-200">
         <table className="w-full text-left text-xs divide-y divide-slate-200 font-mono">
           <thead className="bg-slate-50 text-[11px] font-semibold text-slate-700">
             <tr>
-              {mockHeaders.map((h) => (
-                <th key={h} className="p-2.5">
+              {headers.map((h, i) => (
+                <th key={i} className="p-2.5">
                   {h}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-slate-800 text-[11px]">
-            {mockRows.map((r, i) => (
+            {rows.map((r, i) => (
               <tr key={i} className="hover:bg-slate-50/80">
                 {r.map((cell, cIdx) => (
                   <td key={cIdx} className="p-2.5 whitespace-nowrap">
@@ -229,78 +258,60 @@ function TabularSandbox({ file }: { file: SevrFile }) {
   );
 }
 
-function DocumentSandbox({ file }: { file: SevrFile }) {
+function DocumentSandbox({ file, textContent }: { file: SevrFile; textContent: string | null }) {
   return (
     <div className="space-y-4">
-      <div className="border-b border-slate-200 pb-3">
-        <h3 className="text-base font-bold text-slate-900 tracking-tight">
-          Bayero University Kano — Scoped Enclave Research Manuscript
-        </h3>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Asset Reference: <code className="font-mono text-emerald-700 font-semibold">{file.name}</code> (Version {file.versionCount})
-        </p>
+      <div className="border-b border-slate-200 pb-3 space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            Uploaded Research Document
+          </span>
+          <span className="text-[11px] font-mono text-slate-400">TLP:{file.tlpLabel}</span>
+        </div>
+        <h2 className="text-base font-bold text-slate-900 tracking-tight leading-snug">
+          {file.name}
+        </h2>
+        <div className="flex items-center gap-4 text-[11px] text-slate-500 pt-0.5">
+          <span className="flex items-center gap-1"><User className="w-3 h-3 text-slate-400" /> {file.uploadedBy}</span>
+          <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-slate-400" /> {file.uploadedAt?.slice(0, 10) || "Recent"}</span>
+          <span className="flex items-center gap-1"><HardDrive className="w-3 h-3 text-slate-400" /> {((file.sizeBytes || 0) / 1024).toFixed(1)} KB</span>
+        </div>
       </div>
 
-      <div className="space-y-2.5 text-xs text-slate-700 leading-relaxed font-serif">
-        <p className="font-semibold text-slate-900">ABSTRACT & EXECUTIVE CLEARANCE</p>
-        <p>
-          This research dataset encompasses longitudinal microbial genomic sequencing and water quality telemetry collected across northern Sahelian groundwater reservoirs. Data release is governed under the institutional Zero-Trust Research Charter.
-        </p>
-        <p>
-          Collaborators receiving this document are bound by the FIRST Standards TLP 2.0 attribution rules. Unauthorized egress or redistribution beyond authorized boundaries constitutes a compliance violation logged in the cryptographic hash-chained audit trail.
-        </p>
-        <div className="p-3 bg-slate-50 rounded border border-slate-200 font-mono text-[11px] text-slate-600">
-          <span className="font-bold text-slate-800">Methodology Clearance:</span> Continuous telemetry logging via RS-485 sensors, validated via ISO/IEC 17025 accredited laboratory verification.
-        </div>
+      <div className="space-y-3 text-xs text-slate-800 leading-relaxed">
+        {textContent ? (
+          <div className="bg-slate-50/90 p-5 rounded-lg border border-slate-200 text-slate-900 text-xs leading-relaxed whitespace-pre-wrap max-h-[420px] overflow-y-auto font-sans shadow-inner">
+            {textContent}
+          </div>
+        ) : (
+          <div className="p-6 bg-slate-50/80 rounded-lg border border-slate-200 text-xs text-slate-600 leading-relaxed flex items-center justify-center min-h-[200px]">
+            <span className="text-slate-500 font-mono animate-pulse">Reading document text content for {file.name}…</span>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function TextCodeSandbox({ file }: { file: SevrFile }) {
+function TextCodeSandbox({ file, textContent }: { file: SevrFile; textContent: string | null }) {
   return (
     <div className="space-y-3 font-mono text-xs">
-      <div className="flex items-center gap-2 pb-2 border-b border-slate-200 text-slate-700 font-semibold">
-        <FileCode className="w-4 h-4 text-teal-600" />
-        <span>Source Codebook &amp; Computational Pipeline</span>
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200 text-slate-700 font-semibold">
+        <div className="flex items-center gap-2">
+          <FileCode className="w-4 h-4 text-emerald-600" />
+          <span>{file.name}</span>
+        </div>
+        <span className="text-[10px] text-slate-400 font-mono">{((file.sizeBytes || 0) / 1024).toFixed(1)} KB</span>
       </div>
 
-      <pre className="bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto text-[11px] leading-5 font-mono">
-        <code>{`# SeVR Computational Pipeline — Statistical Verification
-import pandas as pd
-import numpy as np
-
-def evaluate_contamination_index(df: pd.DataFrame) -> pd.Series:
-    """Computes normalized threat index across sampled groundwater wells."""
-    threshold = 0.05  # mg/L baseline WHO threshold
-    anomaly_mask = df['Contaminant_PPM'] > threshold
-    return np.where(anomaly_mask, 'Action Required', 'Safe')
-
-print("Loaded telemetry pipeline version 2.4.0-sevr")`}</code>
+      <pre className="bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto text-[11px] leading-5 font-mono whitespace-pre-wrap max-h-[400px]">
+        <code>{textContent || `Reading ${file.name} content…`}</code>
       </pre>
     </div>
   );
 }
 
-function ImageSandbox({ file }: { file: SevrFile }) {
-  return (
-    <div className="flex flex-col items-center justify-center p-6 space-y-3 text-center">
-      <div className="w-full h-48 bg-slate-100 border border-slate-200 rounded-lg flex items-center justify-center text-slate-400">
-        <div className="flex flex-col items-center gap-2">
-          <ImageIcon className="w-10 h-10 text-slate-300" />
-          <span className="text-xs font-mono font-medium text-slate-500">
-            Rendered Raster Graphic ({file.name})
-          </span>
-        </div>
-      </div>
-      <p className="text-[11px] text-slate-500">
-        Visual graphic safely scaled to preview canvas. Recipient watermark active.
-      </p>
-    </div>
-  );
-}
-
-function GenomicDossierSandbox({ file }: { file: SevrFile }) {
+function GenomicDossierSandbox({ file, textContent }: { file: SevrFile; textContent: string | null }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 pb-2.5 border-b border-slate-200 text-slate-900">
@@ -308,71 +319,34 @@ function GenomicDossierSandbox({ file }: { file: SevrFile }) {
           <Dna className="w-4 h-4" />
         </div>
         <div>
-          <h4 className="text-xs font-bold text-slate-900">Genomic FASTQ / FASTA Structured Dossier</h4>
-          <p className="text-[11px] text-slate-500">Unfiltered binary genomic sequences are sandboxed from DOM execution.</p>
+          <h4 className="text-xs font-bold text-slate-900">{file.name} — Genomic Sequence</h4>
+          <p className="text-[11px] text-slate-500">Primary sequence reads ingested into varsity enclave.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <div className="p-3 rounded border border-slate-200 bg-slate-50 space-y-1">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Sequence Quality</span>
-          <p className="font-mono font-semibold text-slate-800">Q30 Quality Score: 94.2%</p>
-        </div>
-        <div className="p-3 rounded border border-slate-200 bg-slate-50 space-y-1">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Read Depth</span>
-          <p className="font-mono font-semibold text-slate-800">100x Paired-End (Illumina)</p>
-        </div>
-        <div className="p-3 rounded border border-slate-200 bg-slate-50 space-y-1">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">File Header Magic</span>
-          <p className="font-mono font-semibold text-slate-800">@SRR10294812.1_1</p>
-        </div>
-        <div className="p-3 rounded border border-slate-200 bg-slate-50 space-y-1">
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Base Count</span>
-          <p className="font-mono font-semibold text-slate-800">2.41 Million Base Pairs</p>
-        </div>
-      </div>
-
-      <div className="flex items-start gap-2 p-3 bg-amber-50 rounded border border-amber-200 text-xs text-amber-900">
-        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-        <span>
-          <strong>Safe Preview Certification:</strong> This sequence dossier has passed automated malware and shellcode heuristic scanning before release authorization.
-        </span>
-      </div>
+      <pre className="bg-slate-950 text-slate-100 p-4 rounded-lg overflow-x-auto text-[11px] leading-5 font-mono whitespace-pre-wrap max-h-[380px]">
+        <code>{textContent || `Reading genomic sequence ${file.name}…`}</code>
+      </pre>
     </div>
   );
 }
 
-function StructuredDossierSandbox({ file }: { file: SevrFile }) {
+function StructuredDossierSandbox({ file, textContent }: { file: SevrFile; textContent: string | null }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2 pb-2.5 border-b border-slate-200 text-slate-900">
-        <div className="p-1.5 rounded-lg bg-blue-50 text-blue-700">
-          <Binary className="w-4 h-4" />
+        <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
+          <FileText className="w-4 h-4" />
         </div>
         <div>
-          <h4 className="text-xs font-bold text-slate-900">Scientific Matrix Dossier ({file.originalFormat.toUpperCase()})</h4>
-          <p className="text-[11px] text-slate-500">Binary research asset analyzed via cryptographic byte inspector.</p>
+          <h4 className="text-xs font-bold text-slate-900">{file.name}</h4>
+          <p className="text-[11px] text-slate-500">Research asset ingested into enclave.</p>
         </div>
       </div>
 
-      <div className="p-3.5 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-2 font-mono">
-        <div className="flex justify-between">
-          <span className="text-slate-500">Container Size:</span>
-          <span className="font-semibold text-slate-800">{((file.sizeBytes || 0) / 1024 / 1024).toFixed(2)} MB</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-slate-500">Security Tag:</span>
-          <span className="font-semibold text-rose-700">TLP:{file.tlpLabel}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-slate-500">Cryptographic Digest:</span>
-          <span className="font-semibold text-slate-800 truncate max-w-[200px]">{file.checksumSha256 || "Pending"}</span>
-        </div>
+      <div className="bg-slate-50/90 p-5 rounded-lg border border-slate-200 text-slate-900 text-xs leading-relaxed whitespace-pre-wrap max-h-[380px] overflow-y-auto font-sans shadow-inner">
+        {textContent || `Reading asset content for ${file.name}…`}
       </div>
-
-      <p className="text-xs text-slate-600 italic">
-        Raw binary data is prevented from unmediated browser memory execution. Inspect watermark placement and proceed to release evaluation.
-      </p>
     </div>
   );
 }

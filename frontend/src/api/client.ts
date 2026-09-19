@@ -72,9 +72,11 @@ apiClient.interceptors.response.use(
         window.sessionStorage.removeItem("sevr-session");
       } catch { /* ignore */ }
       if (!window.location.pathname.startsWith("/login") &&
-          !window.location.pathname.startsWith("/auth")) {
+          !window.location.pathname.startsWith("/auth") &&
+          !window.location.pathname.startsWith("/share")) {
         window.location.href = "/auth/session-expired";
       }
+
     }
     return Promise.reject(error);
   },

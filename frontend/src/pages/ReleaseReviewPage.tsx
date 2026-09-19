@@ -18,7 +18,9 @@ import {
   FileText,
 } from "lucide-react";
 import { projectsApi, filesApi } from "../api/services";
+import { apiClient } from "../api/client";
 import type { Project, SevrFile, ExportDecision } from "../types";
+
 import TlpBadge from "../components/tlp/TlpBadge";
 import type { WatermarkConfig } from "../components/preview/SafePreviewRenderer";
 import { readAuthSession } from "./LoginPage";
@@ -43,6 +45,9 @@ export default function ReleaseReviewPage() {
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [generatingLink, setGeneratingLink] = useState(false);
+
 
   const session = readAuthSession();
   const isSupervisor = ["supervisor", "institution_admin", "system_admin"].includes(session?.role ?? "");
@@ -110,13 +115,31 @@ export default function ReleaseReviewPage() {
     }
   };
 
-  const handleGenerateShareLink = () => {
+  const handleGenerateShareLink = async () => {
     if (!file || !project) return;
-    const mockToken = `sevr_sec_${Math.random().toString(36).substring(2, 10)}_${Date.now()}`;
-    const fullUrl = `${window.location.origin}/shared/${mockToken}?recipient=${encodeURIComponent(
-      watermarkConfig?.recipient || ""
-    )}&expiry=${shareLinkExpiry}`;
-    setGeneratedLink(fullUrl);
+    setError(null);
+    setGeneratingLink(true);
+    try {
+      const hours = shareLinkExpiry === "24h" ? 24 : shareLinkExpiry === "48h" ? 48 : 168;
+      const artifactType = decision?.outcome === "sevr_container" ? "sevr_container" : "native";
+      const recipientEmail = watermarkConfig?.recipient || session?.email || "researcher@bayero.edu.ng";
+
+      const res = await apiClient.post("/share/create", {
+        fileId: file.id,
+        projectId: project.id,
+        recipientEmail,
+        artifactType,
+        expiresInHours: hours,
+      });
+
+      const fullUrl = `${window.location.origin}${res.data.shareUrl}`;
+      setGeneratedLink(fullUrl);
+    } catch (err: any) {
+      console.error("Failed to generate share link:", err);
+      setError(err.response?.data?.detail || "Failed to generate scoped share link.");
+    } finally {
+      setGeneratingLink(false);
+    }
   };
 
   const copyShareLink = () => {
@@ -126,10 +149,58 @@ export default function ReleaseReviewPage() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleDownloadPackage = () => {
-    setDownloadSuccess(true);
-    setTimeout(() => setDownloadSuccess(false), 4000);
+  const handleDownloadPackage = async () => {
+    if (!file || !project) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      const artifactType = decision?.outcome === "sevr_container" ? "sevr_container" : "native";
+      const recipientEmail = watermarkConfig?.recipient || session?.email || "researcher@bayero.edu.ng";
+
+      const res = await apiClient.post("/share/create", {
+        fileId: file.id,
+        projectId: project.id,
+        recipientEmail,
+        artifactType,
+        expiresInHours: 24,
+      });
+
+      const downloadToken = res.data.token;
+      const downloadRes = await apiClient.get(`/share/${downloadToken}/download`, {
+        responseType: "blob",
+      });
+
+      const contentDisposition = downloadRes.headers["content-disposition"];
+      let filename = file.name;
+      if (artifactType === "sevr_container" && !filename.endsWith(".sevr")) {
+        filename = `${filename}.sevr`;
+      }
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) {
+          filename = match[1];
+        }
+      }
+
+      const blobUrl = window.URL.createObjectURL(new Blob([downloadRes.data]));
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+
+      setDownloadSuccess(true);
+      setTimeout(() => setDownloadSuccess(false), 5000);
+    } catch (err: any) {
+      console.error("Failed to download release package:", err);
+      setError(err.response?.data?.detail || "Failed to generate and download release package.");
+    } finally {
+      setDownloading(false);
+    }
   };
+
 
   // -------------------------------------------------------------------------
   // FLOW GUARD: Uninspected Access Blocked
@@ -409,12 +480,20 @@ export default function ReleaseReviewPage() {
           <button
             type="button"
             onClick={handleDownloadPackage}
-            disabled={isBlocked}
+            disabled={isBlocked || downloading}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg shadow-xs transition"
           >
-            <Download className="w-4 h-4 text-emerald-400" />
+            {downloading ? (
+              <Loader2 className="w-4 h-4 text-emerald-400 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 text-emerald-400" />
+            )}
             <span>
-              {isContainer ? "Download Sealed .sevr Container" : "Download Verified Native Asset"}
+              {downloading
+                ? "Generating & Packaging Asset..."
+                : isContainer
+                ? "Download Sealed .sevr Container"
+                : "Download Verified Native Asset"}
             </span>
           </button>
 
@@ -449,7 +528,7 @@ export default function ReleaseReviewPage() {
                     key={window}
                     type="button"
                     onClick={() => setShareLinkExpiry(window)}
-                    disabled={isBlocked}
+                    disabled={isBlocked || generatingLink}
                     className={`py-1.5 text-xs font-semibold rounded-lg border transition ${
                       shareLinkExpiry === window
                         ? "bg-teal-50 border-teal-500 text-teal-800"
@@ -465,12 +544,17 @@ export default function ReleaseReviewPage() {
             <button
               type="button"
               onClick={handleGenerateShareLink}
-              disabled={isBlocked}
+              disabled={isBlocked || generatingLink}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-slate-800 bg-teal-50 border border-teal-200 hover:bg-teal-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition"
             >
-              <Share2 className="w-4 h-4 text-teal-600" />
-              <span>Generate Scoped Share Link</span>
+              {generatingLink ? (
+                <Loader2 className="w-4 h-4 text-teal-600 animate-spin" />
+              ) : (
+                <Share2 className="w-4 h-4 text-teal-600" />
+              )}
+              <span>{generatingLink ? "Generating Token Link..." : "Generate Scoped Share Link"}</span>
             </button>
+
 
             {generatedLink && (
               <div className="space-y-2 pt-1">
