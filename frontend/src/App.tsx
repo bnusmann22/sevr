@@ -92,6 +92,8 @@ function ProtectedApp() {
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspace />} />
         <Route path="/projects/:projectId/files/:fileId" element={<FileDetailPage />} />
+        <Route path="/projects/:projectId/upload" element={<UploadPage />} />
+        <Route path="/projects/:projectId/export" element={<ExportSharePage />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/export" element={<ExportSharePage />} />
         <Route path="/audit" element={<AuditTrailPage />} />
