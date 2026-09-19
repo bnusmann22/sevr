@@ -66,7 +66,35 @@ def test_sevr_container_tamper_detection():
         pass
 
 
+def test_sevr_container_expiration():
+    from datetime import datetime, timedelta, timezone
+    private_key = ed25519.Ed25519PrivateKey.generate()
+    public_key = private_key.public_key()
+    sym_key = AESGCM.generate_key(bit_length=256)
+
+    encoder = SevrEncoder(private_key=private_key, symmetric_key=sym_key)
+    decoder = SevrDecoder(public_key=public_key, symmetric_key=sym_key)
+
+    # Encode container that expired 1 hour ago
+    past_dt = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    expired_container = encoder.encode(
+        b"CONFIDENTIAL_DATASET",
+        {"file_id": "file_exp"},
+        expires_at=past_dt
+    )
+
+    header = decoder.inspect_header(expired_container)
+    assert header["status"]["is_expired"] is True
+
+    try:
+        decoder.decode(expired_container, enforce_expiration=True)
+        assert False, "Should have raised SevrDecoderError due to expired clearance"
+    except SevrDecoderError as err:
+        assert "CONTAINER_TIME_LOCKED" in str(err)
+
+
 if __name__ == "__main__":
     test_sevr_container_roundtrip()
     test_sevr_container_tamper_detection()
+    test_sevr_container_expiration()
     print("ALL SEVR FORMAT TESTS PASSED SUCCESSFULLY!")

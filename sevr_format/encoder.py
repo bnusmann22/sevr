@@ -1,7 +1,7 @@
 import json
 import os
 import struct
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -17,7 +17,7 @@ class SevrEncoder:
     Layout:
     1. Magic Header: b"SEVR0100" (8 bytes)
     2. Header Length: uint32 (4 bytes, big-endian)
-    3. Metadata Header (JSON bytes): metadata + watermark manifest
+    3. Metadata Header (JSON bytes): metadata + watermark manifest + expires_at timestamp
     4. Nonce: IV for AES-256-GCM (12 bytes)
     5. Ciphertext + Auth Tag: AES-256-GCM encrypted payload (ciphertext + 16 bytes tag)
     6. Digital Signature: Ed25519 signature over preceding bytes (64 bytes)
@@ -31,14 +31,29 @@ class SevrEncoder:
         self,
         payload_bytes: bytes,
         metadata: Dict[str, Any],
-        watermark_manifest: Optional[Dict[str, Any]] = None
+        watermark_manifest: Optional[Dict[str, Any]] = None,
+        expires_in_hours: int = 24,
+        expires_at: Optional[str] = None
     ) -> bytes:
+        now_dt = datetime.now(timezone.utc)
+        if not expires_at:
+            exp_dt = now_dt + timedelta(hours=expires_in_hours)
+            expires_at_val = exp_dt.isoformat()
+        else:
+            expires_at_val = expires_at
+
         header_data = {
             "metadata": {
                 **metadata,
-                "created_at": metadata.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                "created_at": metadata.get("created_at") or now_dt.isoformat(),
+                "expires_at": expires_at_val,
+                "size_bytes": len(payload_bytes),
+                "format": metadata.get("format") or metadata.get("original_format") or "docx",
             },
-            "watermark": watermark_manifest or {}
+            "watermark": watermark_manifest or {
+                "stamped": True,
+                "stampedAt": now_dt.isoformat(),
+            }
         }
         
         header_json_bytes = json.dumps(header_data, sort_keys=True).encode("utf-8")

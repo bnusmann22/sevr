@@ -1725,8 +1725,8 @@ def read_notification(notification_id: str):
 @app.post("/share/create", response_model=ShareTokenResponse)
 def create_share_token(
     req: CreateShareTokenRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    claims: dict = Depends(decode_access_token)
 ):
     if not INSTITUTION_EMAIL_PATTERN.match(req.recipientEmail):
         raise HTTPException(
@@ -1753,7 +1753,7 @@ def create_share_token(
     )
     db.add(share_token)
     
-    actor_name = claims.get("name", claims.get("email", "Authorized Researcher"))
+    actor_name = current_user.name or current_user.email
     audit_ev = ActivityEvent(
         id=f"act_{uuid4().hex[:8]}",
         project_id=req.projectId,
@@ -1785,13 +1785,21 @@ def validate_share_token(token: str, db: Session = Depends(get_db)):
         return ValidateShareTokenResponse(valid=False, status="invalid")
         
     now = datetime.now(timezone.utc)
-    if st.expires_at < now or st.status == "expired":
+    exp_dt = st.expires_at
+    if isinstance(exp_dt, str):
+        try:
+            exp_dt = datetime.fromisoformat(exp_dt.replace("Z", "+00:00"))
+        except Exception:
+            exp_dt = now
+
+    if exp_dt < now or st.status == "expired":
         return ValidateShareTokenResponse(valid=False, status="expired")
         
     file_rec = db.query(FileRecord).filter(FileRecord.id == st.file_id).first()
     if not file_rec:
         return ValidateShareTokenResponse(valid=False, status="invalid")
         
+    expires_str = exp_dt.isoformat() if hasattr(exp_dt, "isoformat") else str(exp_dt)
     return ValidateShareTokenResponse(
         valid=True,
         status="active",
@@ -1801,7 +1809,7 @@ def validate_share_token(token: str, db: Session = Depends(get_db)):
         tlpLabel=file_rec.tlp_label,
         recipientEmail=st.recipient_email,
         artifactType=st.artifact_type,
-        expiresAt=st.expires_at.isoformat()
+        expiresAt=expires_str
     )
 
 
@@ -1812,7 +1820,14 @@ def download_share_token_asset(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Share token unavailable")
         
     now = datetime.now(timezone.utc)
-    if st.expires_at < now or st.status == "expired":
+    exp_dt = st.expires_at
+    if isinstance(exp_dt, str):
+        try:
+            exp_dt = datetime.fromisoformat(exp_dt.replace("Z", "+00:00"))
+        except Exception:
+            exp_dt = now
+
+    if exp_dt < now or st.status == "expired":
         raise HTTPException(status_code=410, detail="Share token has expired")
         
     file_rec = db.query(FileRecord).filter(FileRecord.id == st.file_id).first()
@@ -1845,32 +1860,50 @@ def download_share_token_asset(token: str, db: Session = Depends(get_db)):
         except Exception:
             raw_bytes = f"PRIMARY RESEARCH ASSET CONTENT — {file_rec.name}\nChecksum: {file_rec.checksum_sha256}".encode("utf-8")
         
+    expires_str = exp_dt.isoformat() if hasattr(exp_dt, "isoformat") else str(exp_dt)
+
+    from urllib.parse import quote
+
+    # RFC 5987 / latin-1 safe Content-Disposition headers for filenames with unicode chars (e.g. smart quotes ’)
+    ascii_clean_name = re.sub(r'[^\x20-\x7E]', '_', file_rec.name).strip() or "document"
+    utf8_quoted_name = quote(file_rec.name)
+
     if st.artifact_type == "sevr_container":
         encoder = SevrEncoder()
         metadata = {
             "file_id": file_rec.id,
             "name": file_rec.name,
+            "original_format": file_rec.original_format,
             "tlp": file_rec.tlp_label,
             "institution": "Scoped Enclave for Varsity Research (SeVR)",
-            "recipient": st.recipient_email
+            "recipient": st.recipient_email,
+            "expires_at": expires_str,
         }
         watermark = {
             "stamped": True,
             "recipient": st.recipient_email,
-            "checksum": file_rec.checksum_sha256 or "na"
+            "checksum": file_rec.checksum_sha256 or "na",
+            "watermarkId": f"SEVR-STAMP-{secrets.token_hex(4).upper()}",
+            "stampedAt": datetime.now(timezone.utc).isoformat(),
         }
-        container_bytes = encoder.encode(raw_bytes, metadata, watermark)
-        container_filename = f"{file_rec.name}.sevr"
+        container_bytes = encoder.encode(
+            payload_bytes=raw_bytes,
+            metadata=metadata,
+            watermark_manifest=watermark,
+            expires_at=expires_str,
+        )
+        disp_header = f'attachment; filename="{ascii_clean_name}.sevr"; filename*=UTF-8\'\'{utf8_quoted_name}.sevr'
         return Response(
             content=container_bytes,
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{container_filename}"'}
+            headers={"Content-Disposition": disp_header}
         )
     else:
+        disp_header = f'attachment; filename="{ascii_clean_name}"; filename*=UTF-8\'\'{utf8_quoted_name}'
         return Response(
             content=raw_bytes,
             media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{file_rec.name}"'}
+            headers={"Content-Disposition": disp_header}
         )
 
 
