@@ -20,6 +20,8 @@ class Project(Base):
     files: Mapped[list["FileRecord"]] = relationship("FileRecord", back_populates="project", cascade="all, delete-orphan")
     activities: Mapped[list["ActivityEvent"]] = relationship("ActivityEvent", back_populates="project", cascade="all, delete-orphan")
     invitations: Mapped[list["ProjectInvitation"]] = relationship("ProjectInvitation", back_populates="project", cascade="all, delete-orphan")
+    share_tokens: Mapped[list["ShareToken"]] = relationship("ShareToken", back_populates="project", cascade="all, delete-orphan")
+
 
 
 class ProjectMember(Base):
@@ -66,6 +68,8 @@ class FileRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     project: Mapped["Project"] = relationship("Project", back_populates="files")
+    share_tokens: Mapped[list["ShareToken"]] = relationship("ShareToken", back_populates="file", cascade="all, delete-orphan")
+
 
 
 class User(Base):
@@ -102,4 +106,22 @@ class ProjectInvitation(Base):
 
     project: Mapped["Project"] = relationship("Project", back_populates="invitations")
     invitee: Mapped["User"] = relationship("User", back_populates="invitations", foreign_keys=[invitee_email])
+
+
+class ShareToken(Base):
+    __tablename__ = "share_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("file_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    recipient_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    artifact_type: Mapped[str] = mapped_column(String(20), nullable=False, default="native")  # native, sevr_container
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")  # active, revoked, exhausted
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    project: Mapped["Project"] = relationship("Project", back_populates="share_tokens")
+    file: Mapped["FileRecord"] = relationship("FileRecord", back_populates="share_tokens")
+
 

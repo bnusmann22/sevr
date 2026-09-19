@@ -963,4 +963,111 @@ export const handlers = [
     const projectAudit = auditStore.filter((a: any) => !a.projectId || a.projectId === projectId);
     return HttpResponse.json(projectAudit);
   }),
+
+  // ---------------------------------------------------------------------------
+  // Share Tokens MSW Handlers (Phase 4)
+  // ---------------------------------------------------------------------------
+  http.post(`${BASE}/share/create`, async ({ request }) => {
+    const body = (await request.json()) as {
+      fileId: string;
+      projectId: string;
+      recipientEmail: string;
+      artifactType?: string;
+      expiresInHours?: number;
+    };
+
+    if (!body.recipientEmail || !/^[^\s@]+@(?:[a-z0-9-]+\.)*(?:edu\.ng|edu)$/i.test(body.recipientEmail)) {
+      return HttpResponse.json(
+        { detail: "Recipient email must belong to a valid tertiary institution domain (*.edu.ng, *.edu)" },
+        { status: 400 }
+      );
+    }
+
+    filesStore = loadFromStorage("sevr_mock_files", SEED_FILES);
+    const file = filesStore.find((f) => f.id === body.fileId) || filesStore[0];
+
+    const tokenStr = `st_mock_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    const expiresDt = new Date(Date.now() + (body.expiresInHours || 24) * 3600 * 1000).toISOString();
+
+    const shareTokensStore = loadFromStorage<Record<string, any>>("sevr_mock_share_tokens", {});
+    shareTokensStore[tokenStr] = {
+      id: `token_${Date.now()}`,
+      token: tokenStr,
+      fileId: file.id,
+      fileName: file.name,
+      originalFormat: file.originalFormat,
+      tlpLabel: file.tlpLabel,
+      projectId: body.projectId,
+      recipientEmail: body.recipientEmail,
+      artifactType: body.artifactType || "native",
+      expiresAt: expiresDt,
+      status: "active",
+    };
+    saveToStorage("sevr_mock_share_tokens", shareTokensStore);
+
+    return HttpResponse.json({
+      id: shareTokensStore[tokenStr].id,
+      token: tokenStr,
+      shareUrl: `/share/${tokenStr}`,
+      fileId: file.id,
+      projectId: body.projectId,
+      recipientEmail: body.recipientEmail,
+      artifactType: body.artifactType || "native",
+      expiresAt: expiresDt,
+      status: "active",
+    });
+  }),
+
+  http.get(`${BASE}/share/:token/validate`, ({ params }) => {
+    const tokenStr = String(params.token);
+    const shareTokensStore = loadFromStorage<Record<string, any>>("sevr_mock_share_tokens", {});
+    const st = shareTokensStore[tokenStr];
+
+    if (!st || st.status === "revoked") {
+      return HttpResponse.json({ valid: false, status: "invalid" });
+    }
+
+    if (new Date(st.expiresAt) < new Date() || st.status === "expired") {
+      return HttpResponse.json({ valid: false, status: "expired" });
+    }
+
+    return HttpResponse.json({
+      valid: true,
+      status: "active",
+      fileId: st.fileId,
+      fileName: st.fileName,
+      originalFormat: st.originalFormat,
+      tlpLabel: st.tlpLabel,
+      recipientEmail: st.recipientEmail,
+      artifactType: st.artifactType,
+      expiresAt: st.expiresAt,
+    });
+  }),
+
+  http.get(`${BASE}/share/:token/download`, ({ params }) => {
+    const tokenStr = String(params.token);
+    const shareTokensStore = loadFromStorage<Record<string, any>>("sevr_mock_share_tokens", {});
+    const st = shareTokensStore[tokenStr];
+
+    if (!st || st.status === "revoked") {
+      return HttpResponse.json({ detail: "Share token unavailable" }, { status: 404 });
+    }
+
+    if (new Date(st.expiresAt) < new Date() || st.status === "expired") {
+      return HttpResponse.json({ detail: "Share token has expired" }, { status: 410 });
+    }
+
+    const payloadText = `CONFIDENTIAL RESEARCH DATASET PAYLOAD for ${st.fileName || "asset"}\nIssued to: ${st.recipientEmail}`;
+    const blob = new Blob([payloadText], { type: "application/octet-stream" });
+
+    const filename = st.artifactType === "sevr_container" ? `${st.fileName}.sevr` : st.fileName;
+
+    return new HttpResponse(blob, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  }),
 ];
+

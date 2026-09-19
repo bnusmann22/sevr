@@ -19,7 +19,9 @@ import AuditTrailPage from "./pages/AuditTrailPage";
 import DetectionAlertsPage from "./pages/DetectionAlertsPage";
 import ProjectListPage from "./pages/ProjectListPage";
 import ExternalCollaboratorPage from "./pages/ExternalCollaboratorPage";
+import ShareStatePage from "./pages/ShareStatePage";
 import AuthStatusPage from "./pages/AuthStatusPage";
+
 import FileDetailPage from "./pages/FileDetailPage";
 import FilePreviewPage from "./pages/FilePreviewPage";
 import ReleaseReviewPage from "./pages/ReleaseReviewPage";
@@ -75,6 +77,9 @@ function AppLoadingBoundary() {
           <Route path="/auth/callback" element={<AuthStatusPage mode="callback" />} />
           <Route path="/auth/session-expired" element={<AuthStatusPage mode="expired" />} />
           <Route path="/share/:token" element={<ExternalCollaboratorPage />} />
+          <Route path="/share/:token/expired" element={<ShareStatePage type="expired" />} />
+          <Route path="/share/:token/invalid" element={<ShareStatePage type="invalid" />} />
+
 
           {/* Track B: Core Operational Platform (Authenticated Enclave Shell) */}
           <Route path="/*" element={<ProtectedApp />} />

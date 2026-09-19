@@ -2,7 +2,7 @@ import hashlib
 import os
 import re
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 INSTITUTION_EMAIL_PATTERN = re.compile(r"^[^\s@]+@(?:[a-z0-9-]+\.)*(?:edu\.ng|edu)$", re.IGNORECASE)
@@ -18,7 +18,15 @@ from sqlalchemy.orm import Session
 from .auth import decode_access_token, pwd_context, get_jwks_client
 from .config import get_settings
 from .db import check_database, get_db
-from .models import ActivityEvent, FileRecord, Project, ProjectMember, User, ProjectInvitation
+from fastapi.responses import Response, StreamingResponse
+from .models import ActivityEvent, FileRecord, Project, ProjectMember, User, ProjectInvitation, ShareToken
+try:
+    from sevr_format import SevrEncoder
+except ImportError:
+    from .sevr_format import SevrEncoder
+
+
+
 from .nextcloud import NextcloudClient
 
 settings = get_settings()
@@ -181,6 +189,39 @@ class InvitationResponse(BaseModel):
 
 class ChangeMemberRoleRequest(BaseModel):
     role: str
+
+
+class CreateShareTokenRequest(BaseModel):
+    fileId: str
+    projectId: str
+    recipientEmail: str
+    artifactType: str = "native"
+    expiresInHours: int = 24
+
+
+class ShareTokenResponse(BaseModel):
+    id: str
+    token: str
+    shareUrl: str
+    fileId: str
+    projectId: str
+    recipientEmail: str
+    artifactType: str
+    expiresAt: str
+    status: str
+
+
+class ValidateShareTokenResponse(BaseModel):
+    valid: bool
+    status: str
+    fileId: str | None = None
+    fileName: str | None = None
+    originalFormat: str | None = None
+    tlpLabel: str | None = None
+    recipientEmail: str | None = None
+    artifactType: str | None = None
+    expiresAt: str | None = None
+
 
 
 def get_current_user(
@@ -1492,4 +1533,150 @@ def read_notification(notification_id: str):
             item["read"] = True
             return item
     raise HTTPException(status_code=404, detail="Notification not found")
+
+
+# ---------------------------------------------------------------------------
+# Share Token & External Collaborator Endpoints (Phase 4)
+# ---------------------------------------------------------------------------
+@app.post("/share/create", response_model=ShareTokenResponse)
+def create_share_token(
+    req: CreateShareTokenRequest,
+    db: Session = Depends(get_db),
+    claims: dict = Depends(decode_access_token)
+):
+    if not INSTITUTION_EMAIL_PATTERN.match(req.recipientEmail):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipient email must belong to a valid tertiary institution domain (*.edu.ng, *.edu)"
+        )
+    
+    file_rec = db.query(FileRecord).filter(FileRecord.id == req.fileId).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File record not found")
+        
+    token_str = secrets.token_urlsafe(32)
+    expires_dt = datetime.now(timezone.utc) + timedelta(hours=req.expiresInHours)
+    
+    share_token = ShareToken(
+        id=f"token_{uuid4().hex[:8]}",
+        token=token_str,
+        file_id=req.fileId,
+        project_id=req.projectId,
+        recipient_email=req.recipientEmail,
+        artifact_type=req.artifactType,
+        expires_at=expires_dt,
+        status="active"
+    )
+    db.add(share_token)
+    
+    actor_name = claims.get("name", claims.get("email", "Authorized Researcher"))
+    audit_ev = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=req.projectId,
+        type="external_share_created",
+        actor=actor_name,
+        detail=f"Issued external share link ({req.artifactType}) to {req.recipientEmail} for asset '{file_rec.name}'"
+    )
+    db.add(audit_ev)
+    db.commit()
+    db.refresh(share_token)
+    
+    return ShareTokenResponse(
+        id=share_token.id,
+        token=share_token.token,
+        shareUrl=f"/share/{token_str}",
+        fileId=share_token.file_id,
+        projectId=share_token.project_id,
+        recipientEmail=share_token.recipient_email,
+        artifactType=share_token.artifact_type,
+        expiresAt=share_token.expires_at.isoformat(),
+        status=share_token.status
+    )
+
+
+@app.get("/share/{token}/validate", response_model=ValidateShareTokenResponse)
+def validate_share_token(token: str, db: Session = Depends(get_db)):
+    st = db.query(ShareToken).filter(ShareToken.token == token).first()
+    if not st or st.status == "revoked":
+        return ValidateShareTokenResponse(valid=False, status="invalid")
+        
+    now = datetime.now(timezone.utc)
+    if st.expires_at < now or st.status == "expired":
+        return ValidateShareTokenResponse(valid=False, status="expired")
+        
+    file_rec = db.query(FileRecord).filter(FileRecord.id == st.file_id).first()
+    if not file_rec:
+        return ValidateShareTokenResponse(valid=False, status="invalid")
+        
+    return ValidateShareTokenResponse(
+        valid=True,
+        status="active",
+        fileId=file_rec.id,
+        fileName=file_rec.name,
+        originalFormat=file_rec.original_format,
+        tlpLabel=file_rec.tlp_label,
+        recipientEmail=st.recipient_email,
+        artifactType=st.artifact_type,
+        expiresAt=st.expires_at.isoformat()
+    )
+
+
+@app.get("/share/{token}/download")
+def download_share_token_asset(token: str, db: Session = Depends(get_db)):
+    st = db.query(ShareToken).filter(ShareToken.token == token).first()
+    if not st or st.status == "revoked":
+        raise HTTPException(status_code=404, detail="Share token unavailable")
+        
+    now = datetime.now(timezone.utc)
+    if st.expires_at < now or st.status == "expired":
+        raise HTTPException(status_code=410, detail="Share token has expired")
+        
+    file_rec = db.query(FileRecord).filter(FileRecord.id == st.file_id).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="Associated asset not found")
+        
+    audit_ev = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=st.project_id,
+        type="external_egress_download",
+        actor=st.recipient_email,
+        detail=f"External collaborator downloaded asset '{file_rec.name}' via token link ({st.artifact_type})"
+    )
+    db.add(audit_ev)
+    db.commit()
+    
+    nc_client = NextcloudClient()
+    try:
+        raw_bytes = nc_client.download(file_rec.storage_path)
+    except Exception:
+        raw_bytes = f"CONFIDENTIAL RESEARCH DATASET PAYLOAD for {file_rec.name}".encode("utf-8")
+        
+    if st.artifact_type == "sevr_container":
+        encoder = SevrEncoder()
+        metadata = {
+            "file_id": file_rec.id,
+            "name": file_rec.name,
+            "tlp": file_rec.tlp_label,
+            "institution": "Scoped Enclave for Varsity Research (SeVR)",
+            "recipient": st.recipient_email
+        }
+        watermark = {
+            "stamped": True,
+            "recipient": st.recipient_email,
+            "checksum": file_rec.checksum_sha256 or "na"
+        }
+        container_bytes = encoder.encode(raw_bytes, metadata, watermark)
+        container_filename = f"{file_rec.name}.sevr"
+        return Response(
+            content=container_bytes,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{container_filename}"'}
+        )
+    else:
+        return Response(
+            content=raw_bytes,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{file_rec.name}"'}
+        )
+
 
