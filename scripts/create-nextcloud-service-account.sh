@@ -4,7 +4,7 @@ set -eu
 : "${ENV_FILE:=.env}"
 if [ -f "$ENV_FILE" ]; then
   set -a
-  . "$ENV_FILE"
+  . "./$ENV_FILE"
   set +a
 fi
 
