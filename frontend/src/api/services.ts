@@ -90,6 +90,21 @@ export const filesApi = {
     return data;
   },
 
+  async updateContent(
+    projectId: string,
+    fileId: string,
+    content: string,
+    versionBump: "patch" | "minor" | "major",
+    changeSummary?: string
+  ): Promise<SevrFile> {
+    const { data } = await apiClient.put<SevrFile>(`/projects/${projectId}/files/${fileId}/content`, {
+      content,
+      versionBump,
+      changeSummary,
+    });
+    return data;
+  },
+
 
   async upload(projectId: string, formData: FormData): Promise<SevrFile> {
     const { data } = await apiClient.post<SevrFile>(
@@ -104,6 +119,56 @@ export const filesApi = {
     const { data } = await apiClient.post<ExportDecision>(`/files/${fileId}/export`, {
       overrideRequested,
     });
+    return data;
+  },
+
+  // Document Lifecycle & Versioning APIs
+  async listVersions(projectId: string, fileId: string): Promise<import("../types").FileVersion[]> {
+    const { data } = await apiClient.get<import("../types").FileVersion[]>(`/projects/${projectId}/files/${fileId}/versions`);
+    return data;
+  },
+
+  async uploadVersion(projectId: string, fileId: string, file: File, changeSummary?: string): Promise<import("../types").FileVersion> {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (changeSummary) formData.append("changeSummary", changeSummary);
+    const { data } = await apiClient.post<import("../types").FileVersion>(
+      `/projects/${projectId}/files/${fileId}/versions`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return data;
+  },
+
+  async listNotes(projectId: string, fileId: string): Promise<import("../types").FileReviewNote[]> {
+    const { data } = await apiClient.get<import("../types").FileReviewNote[]>(`/projects/${projectId}/files/${fileId}/notes`);
+    return data;
+  },
+
+  async addNote(
+    projectId: string,
+    fileId: string,
+    noteType: import("../types").FileReviewNote["noteType"],
+    content: string,
+    versionId?: string
+  ): Promise<import("../types").FileReviewNote> {
+    const { data } = await apiClient.post<import("../types").FileReviewNote>(
+      `/projects/${projectId}/files/${fileId}/notes`,
+      { noteType, content, versionId }
+    );
+    return data;
+  },
+
+  async transitionState(
+    projectId: string,
+    fileId: string,
+    toState: import("../types").DocumentLifecycleState,
+    reasonNote?: string
+  ): Promise<import("../types").DocumentStateTransition> {
+    const { data } = await apiClient.post<import("../types").DocumentStateTransition>(
+      `/projects/${projectId}/files/${fileId}/transition`,
+      { toState, reasonNote }
+    );
     return data;
   },
 };

@@ -58,6 +58,41 @@ export interface Project {
   createdAt: string;
 }
 
+export type DocumentLifecycleState = "DRAFT" | "IN_REVIEW" | "TLP_EVALUATED" | "RELEASE_PENDING" | "RELEASED";
+
+export interface FileVersion {
+  id: string;
+  fileId: string;
+  versionNumber: string;
+  storagePath?: string;
+  checksumSha256: string;
+  sizeBytes: number;
+  createdBy: string;
+  changeSummary?: string;
+  createdAt: string;
+}
+
+export interface FileReviewNote {
+  id: string;
+  fileId: string;
+  versionId?: string;
+  authorId: string;
+  authorName: string;
+  noteType: "PEER_COMMENT" | "SUPERVISOR_JUSTIFICATION" | "TLP_OVERRIDE_REASON";
+  content: string;
+  createdAt: string;
+}
+
+export interface DocumentStateTransition {
+  id: string;
+  fileId: string;
+  fromState: DocumentLifecycleState;
+  toState: DocumentLifecycleState;
+  actorId: string;
+  reasonNote?: string;
+  createdAt: string;
+}
+
 export interface SevrFile {
   id: string;
   projectId: string;
@@ -69,6 +104,7 @@ export interface SevrFile {
   sizeBytes?: number;
   checksumSha256?: string;
   versionCount: number;
+  lifecycleState?: DocumentLifecycleState;
 }
 
 export interface ExportRequest {

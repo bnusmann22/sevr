@@ -65,11 +65,59 @@ class FileRecord(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     version_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    lifecycle_state: Mapped[str] = mapped_column(String(50), nullable=False, default="DRAFT")  # DRAFT, IN_REVIEW, TLP_EVALUATED, RELEASE_PENDING, RELEASED
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     project: Mapped["Project"] = relationship("Project", back_populates="files")
     share_tokens: Mapped[list["ShareToken"]] = relationship("ShareToken", back_populates="file", cascade="all, delete-orphan")
+    versions: Mapped[list["FileVersion"]] = relationship("FileVersion", back_populates="file", cascade="all, delete-orphan")
+    review_notes: Mapped[list["FileReviewNote"]] = relationship("FileReviewNote", back_populates="file", cascade="all, delete-orphan")
+    transitions: Mapped[list["DocumentStateTransition"]] = relationship("DocumentStateTransition", back_populates="file", cascade="all, delete-orphan")
 
+
+class FileVersion(Base):
+    __tablename__ = "file_versions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("file_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0")
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    file: Mapped["FileRecord"] = relationship("FileRecord", back_populates="versions")
+
+
+class FileReviewNote(Base):
+    __tablename__ = "file_review_notes"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("file_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("file_versions.id", ondelete="SET NULL"), nullable=True)
+    author_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    author_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    note_type: Mapped[str] = mapped_column(String(50), nullable=False, default="PEER_COMMENT") # PEER_COMMENT, SUPERVISOR_JUSTIFICATION, TLP_OVERRIDE_REASON
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    file: Mapped["FileRecord"] = relationship("FileRecord", back_populates="review_notes")
+
+
+class DocumentStateTransition(Base):
+    __tablename__ = "document_state_transitions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    file_id: Mapped[str] = mapped_column(String(36), ForeignKey("file_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    from_state: Mapped[str] = mapped_column(String(50), nullable=False)
+    to_state: Mapped[str] = mapped_column(String(50), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    file: Mapped["FileRecord"] = relationship("FileRecord", back_populates="transitions")
 
 
 class User(Base):
@@ -138,5 +186,6 @@ class DetectionAnomaly(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     project: Mapped["Project"] = relationship("Project")
+
 
 

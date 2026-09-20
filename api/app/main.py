@@ -19,7 +19,19 @@ from .auth import decode_access_token, pwd_context, get_jwks_client
 from .config import get_settings
 from .db import check_database, get_db
 from fastapi.responses import Response, StreamingResponse
-from .models import ActivityEvent, FileRecord, Project, ProjectMember, User, ProjectInvitation, ShareToken, DetectionAnomaly
+from .models import (
+    ActivityEvent,
+    FileRecord,
+    Project,
+    ProjectMember,
+    User,
+    ProjectInvitation,
+    ShareToken,
+    DetectionAnomaly,
+    FileVersion,
+    FileReviewNote,
+    DocumentStateTransition,
+)
 try:
     from sevr_format import SevrEncoder, SevrDecoder, SevrDecoderError
 except ImportError:
@@ -95,6 +107,16 @@ class ActivityResponse(BaseModel):
         from_attributes = True
 
 
+def format_iso(dt) -> str:
+    if dt is None:
+        return ""
+    if isinstance(dt, str):
+        return dt
+    if hasattr(dt, "isoformat"):
+        return dt.isoformat()
+    return str(dt)
+
+
 class FileResponse(BaseModel):
     id: str
     projectId: str
@@ -106,9 +128,63 @@ class FileResponse(BaseModel):
     sizeBytes: int
     checksumSha256: str | None = None
     versionCount: int
+    lifecycleState: str | None = "DRAFT"
 
     class Config:
         from_attributes = True
+
+
+class FileVersionResponse(BaseModel):
+    id: str
+    fileId: str
+    versionNumber: str
+    storagePath: str | None = None
+    checksumSha256: str
+    sizeBytes: int
+    createdBy: str
+    changeSummary: str | None = None
+    createdAt: str
+
+    class Config:
+        from_attributes = True
+
+
+class FileReviewNoteResponse(BaseModel):
+    id: str
+    fileId: str
+    versionId: str | None = None
+    authorId: str
+    authorName: str
+    noteType: str
+    content: str
+    createdAt: str
+
+    class Config:
+        from_attributes = True
+
+
+class DocumentStateTransitionResponse(BaseModel):
+    id: str
+    fileId: str
+    fromState: str
+    toState: str
+    actorId: str
+    reasonNote: str | None = None
+    createdAt: str
+
+    class Config:
+        from_attributes = True
+
+
+class CreateFileReviewNoteRequest(BaseModel):
+    noteType: str = "PEER_COMMENT"
+    content: str
+    versionId: str | None = None
+
+
+class StateTransitionRequest(BaseModel):
+    toState: str
+    reasonNote: str | None = None
 
 
 class ExportRequest(BaseModel):
@@ -1311,10 +1387,11 @@ def list_files(
             originalFormat=f.original_format,
             tlpLabel=f.tlp_label,
             uploadedBy=f.uploaded_by,
-            uploadedAt=f.created_at.isoformat(),
-            sizeBytes=f.size_bytes,
+            uploadedAt=format_iso(f.created_at),
+            sizeBytes=f.size_bytes or 0,
             checksumSha256=f.checksum_sha256,
-            versionCount=f.version_count,
+            versionCount=f.version_count or 1,
+            lifecycleState=getattr(f, "lifecycle_state", "DRAFT") or "DRAFT",
         )
         for f in files
     ]
@@ -1340,10 +1417,11 @@ def get_file(
         originalFormat=file.original_format,
         tlpLabel=file.tlp_label,
         uploadedBy=file.uploaded_by,
-        uploadedAt=file.created_at.isoformat(),
-        sizeBytes=file.size_bytes,
+        uploadedAt=format_iso(file.created_at),
+        sizeBytes=file.size_bytes or 0,
         checksumSha256=file.checksum_sha256,
-        versionCount=file.version_count,
+        versionCount=file.version_count or 1,
+        lifecycleState=getattr(file, "lifecycle_state", "DRAFT") or "DRAFT",
     )
 
 
@@ -1506,6 +1584,101 @@ def get_file_content(
     return {"content": content_str, "name": file_rec.name, "format": file_rec.original_format}
 
 
+class UpdateFileContentPayload(BaseModel):
+    content: str
+    versionBump: str | None = "patch"
+    changeSummary: str | None = None
+
+
+@app.put("/projects/{project_id}/files/{file_id}/content", response_model=FileResponse)
+def update_file_content(
+    project_id: str,
+    file_id: str,
+    payload: UpdateFileContentPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_rec = db.query(FileRecord).filter(
+        FileRecord.project_id == project_id, FileRecord.id == file_id
+    ).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content_bytes = payload.content.encode("utf-8")
+    checksum = hashlib.sha256(content_bytes).hexdigest()
+    size = len(content_bytes)
+
+    actor_name = current_user.name or current_user.email
+    current_count = file_rec.version_count or 1
+    next_ver_str = f"{current_count + 1}.0"
+
+    file_rec.version_count = current_count + 1
+    file_rec.checksum_sha256 = checksum
+    file_rec.size_bytes = size
+    db.add(file_rec)
+
+    # Overwrite main local file path so get_file_content reads updated content
+    local_path = os.path.join(UPLOAD_DIR, f"{file_rec.id}_{file_rec.name}")
+    try:
+        with open(local_path, "wb") as f:
+            f.write(content_bytes)
+    except Exception as err:
+        print(f"[Storage Warning] Failed writing updated content to disk: {err}")
+
+    # Write version copy
+    ver_path = os.path.join(UPLOAD_DIR, f"{file_id}_v{next_ver_str}_{file_rec.name}")
+    try:
+        with open(ver_path, "wb") as f:
+            f.write(content_bytes)
+    except Exception as err:
+        print(f"[Storage Warning] Failed writing version file to disk: {err}")
+
+    # Stream to Nextcloud WebDAV Vault
+    try:
+        nc_client = NextcloudClient()
+        nc_client.upload(f"vault/{project_id}/{file_rec.name}", content_bytes)
+    except Exception as nc_err:
+        print(f"[Vault Info] Nextcloud WebDAV upload skipped: {nc_err}")
+
+    ver_record = FileVersion(
+        id=f"ver_{uuid4().hex[:8]}",
+        file_id=file_id,
+        version_number=next_ver_str,
+        storage_path=ver_path,
+        checksum_sha256=checksum,
+        size_bytes=size,
+        created_by=actor_name,
+        change_summary=payload.changeSummary or "Updated content via in-enclave editor sandbox",
+    )
+    db.add(ver_record)
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=project_id,
+        type="upload",
+        actor=actor_name,
+        detail=f'Committed edited version v{next_ver_str} for asset "{file_rec.name}"',
+    )
+    db.add(activity)
+
+    db.commit()
+    db.refresh(file_rec)
+
+    return FileResponse(
+        id=file_rec.id,
+        projectId=file_rec.project_id,
+        name=file_rec.name,
+        originalFormat=file_rec.original_format,
+        tlpLabel=file_rec.tlp_label,
+        uploadedBy=file_rec.uploaded_by,
+        uploadedAt=format_iso(file_rec.created_at),
+        sizeBytes=file_rec.size_bytes or 0,
+        checksumSha256=file_rec.checksum_sha256,
+        versionCount=file_rec.version_count or 1,
+        lifecycleState=getattr(file_rec, "lifecycle_state", "DRAFT") or "DRAFT",
+    )
+
+
 
 
 @app.post("/projects/{project_id}/files", response_model=FileResponse, status_code=status.HTTP_201_CREATED)
@@ -1602,10 +1775,280 @@ async def upload_file(
         originalFormat=record.original_format,
         tlpLabel=record.tlp_label,
         uploadedBy=record.uploaded_by,
-        uploadedAt=record.created_at.isoformat(),
-        sizeBytes=record.size_bytes,
+        uploadedAt=format_iso(record.created_at),
+        sizeBytes=record.size_bytes or 0,
         checksumSha256=record.checksum_sha256,
-        versionCount=record.version_count,
+        versionCount=record.version_count or 1,
+        lifecycleState=getattr(record, "lifecycle_state", "DRAFT") or "DRAFT",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Document Lifecycle, Governance & Versioning Endpoints
+# ---------------------------------------------------------------------------
+@app.get("/projects/{project_id}/files/{file_id}/versions", response_model=list[FileVersionResponse])
+def list_file_versions(
+    project_id: str,
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_rec = db.query(FileRecord).filter(
+        FileRecord.project_id == project_id, FileRecord.id == file_id
+    ).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    versions = (
+        db.query(FileVersion)
+        .filter(FileVersion.file_id == file_id)
+        .order_by(FileVersion.created_at.desc())
+        .all()
+    )
+
+    if not versions:
+        v1 = FileVersion(
+            id=f"ver_{uuid4().hex[:8]}",
+            file_id=file_id,
+            version_number="1.0",
+            storage_path=file_rec.storage_path or "",
+            checksum_sha256=file_rec.checksum_sha256 or "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            size_bytes=file_rec.size_bytes or 0,
+            created_by=file_rec.uploaded_by or "Researcher",
+            change_summary="Initial manuscript ingest into research enclave",
+        )
+        db.add(v1)
+        db.commit()
+        db.refresh(v1)
+        versions = [v1]
+
+    return [
+        FileVersionResponse(
+            id=v.id,
+            fileId=v.file_id,
+            versionNumber=v.version_number,
+            storagePath=v.storage_path,
+            checksumSha256=v.checksum_sha256,
+            sizeBytes=v.size_bytes or 0,
+            createdBy=v.created_by,
+            changeSummary=v.change_summary,
+            createdAt=format_iso(v.created_at),
+        )
+        for v in versions
+    ]
+
+
+@app.post("/projects/{project_id}/files/{file_id}/versions", response_model=FileVersionResponse, status_code=status.HTTP_201_CREATED)
+async def upload_file_version(
+    project_id: str,
+    file_id: str,
+    file: UploadFile = File(...),
+    changeSummary: str = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_rec = db.query(FileRecord).filter(
+        FileRecord.project_id == project_id, FileRecord.id == file_id
+    ).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    content = await file.read()
+    checksum = hashlib.sha256(content).hexdigest()
+    size = len(content)
+
+    actor_name = current_user.name or current_user.email
+    current_count = file_rec.version_count or 1
+    next_ver_str = f"{current_count + 1}.0"
+
+    file_rec.version_count = current_count + 1
+    db.add(file_rec)
+
+    ver_id = f"ver_{uuid4().hex[:8]}"
+    local_path = os.path.join(UPLOAD_DIR, f"{file_id}_v{next_ver_str}_{file.filename}")
+    try:
+        with open(local_path, "wb") as f:
+            f.write(content)
+    except Exception as err:
+        print(f"[Storage Warning] Failed writing version file: {err}")
+
+    ver_record = FileVersion(
+        id=ver_id,
+        file_id=file_id,
+        version_number=next_ver_str,
+        storage_path=local_path,
+        checksum_sha256=checksum,
+        size_bytes=size,
+        created_by=actor_name,
+        change_summary=changeSummary or "Ingested revised version",
+    )
+    db.add(ver_record)
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=project_id,
+        type="upload",
+        actor=actor_name,
+        detail=f'Ingested version v{next_ver_str} for asset "{file_rec.name}"',
+    )
+    db.add(activity)
+
+    db.commit()
+    db.refresh(ver_record)
+
+    return FileVersionResponse(
+        id=ver_record.id,
+        fileId=ver_record.file_id,
+        versionNumber=ver_record.version_number,
+        storagePath=ver_record.storage_path,
+        checksumSha256=ver_record.checksum_sha256,
+        sizeBytes=ver_record.size_bytes or 0,
+        createdBy=ver_record.created_by,
+        changeSummary=ver_record.change_summary,
+        createdAt=format_iso(ver_record.created_at),
+    )
+
+
+@app.get("/projects/{project_id}/files/{file_id}/notes", response_model=list[FileReviewNoteResponse])
+def list_file_notes(
+    project_id: str,
+    file_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_rec = db.query(FileRecord).filter(
+        FileRecord.project_id == project_id, FileRecord.id == file_id
+    ).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    notes = (
+        db.query(FileReviewNote)
+        .filter(FileReviewNote.file_id == file_id)
+        .order_by(FileReviewNote.created_at.desc())
+        .all()
+    )
+
+    return [
+        FileReviewNoteResponse(
+            id=n.id,
+            fileId=n.file_id,
+            versionId=n.version_id,
+            authorId=n.author_id,
+            authorName=n.author_name,
+            noteType=n.note_type,
+            content=n.content,
+            createdAt=format_iso(n.created_at),
+        )
+        for n in notes
+    ]
+
+
+@app.post("/projects/{project_id}/files/{file_id}/notes", response_model=FileReviewNoteResponse, status_code=status.HTTP_201_CREATED)
+def create_file_note(
+    project_id: str,
+    file_id: str,
+    req: CreateFileReviewNoteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_rec = db.query(FileRecord).filter(
+        FileRecord.project_id == project_id, FileRecord.id == file_id
+    ).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    actor_name = current_user.name or current_user.email
+    actor_id = current_user.email or current_user.id
+
+    note = FileReviewNote(
+        id=f"note_{uuid4().hex[:8]}",
+        file_id=file_id,
+        version_id=req.versionId,
+        author_id=actor_id,
+        author_name=actor_name,
+        note_type=req.noteType or "PEER_COMMENT",
+        content=req.content,
+    )
+    db.add(note)
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=project_id,
+        type="view",
+        actor=actor_name,
+        detail=f'Posted {req.noteType or "review note"} on asset "{file_rec.name}"',
+    )
+    db.add(activity)
+
+    db.commit()
+    db.refresh(note)
+
+    return FileReviewNoteResponse(
+        id=note.id,
+        fileId=note.file_id,
+        versionId=note.version_id,
+        authorId=note.author_id,
+        authorName=note.author_name,
+        noteType=note.note_type,
+        content=note.content,
+        createdAt=format_iso(note.created_at),
+    )
+
+
+@app.post("/projects/{project_id}/files/{file_id}/transition", response_model=DocumentStateTransitionResponse)
+def transition_file_state(
+    project_id: str,
+    file_id: str,
+    req: StateTransitionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    file_rec = db.query(FileRecord).filter(
+        FileRecord.project_id == project_id, FileRecord.id == file_id
+    ).first()
+    if not file_rec:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    from_state = getattr(file_rec, "lifecycle_state", "DRAFT") or "DRAFT"
+    to_state = req.toState
+
+    file_rec.lifecycle_state = to_state
+    db.add(file_rec)
+
+    actor_name = current_user.name or current_user.email
+    actor_id = current_user.email or current_user.id
+
+    trans = DocumentStateTransition(
+        id=f"trans_{uuid4().hex[:8]}",
+        file_id=file_id,
+        from_state=from_state,
+        to_state=to_state,
+        actor_id=actor_id,
+        reason_note=req.reasonNote,
+    )
+    db.add(trans)
+
+    activity = ActivityEvent(
+        id=f"act_{uuid4().hex[:8]}",
+        project_id=project_id,
+        type="view",
+        actor=actor_name,
+        detail=f'Transitioned asset "{file_rec.name}" state from {from_state} to {to_state}',
+    )
+    db.add(activity)
+
+    db.commit()
+    db.refresh(trans)
+
+    return DocumentStateTransitionResponse(
+        id=trans.id,
+        fileId=trans.file_id,
+        fromState=trans.from_state,
+        toState=trans.to_state,
+        actorId=trans.actor_id,
+        reasonNote=trans.reason_note,
+        createdAt=format_iso(trans.created_at),
     )
 
 

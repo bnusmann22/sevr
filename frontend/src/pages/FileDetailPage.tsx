@@ -11,12 +11,17 @@ import {
   Check,
   RefreshCw,
   AlertCircle,
-  Share2,
   Eye,
+  History,
+  Edit3,
 } from "lucide-react";
 import { filesApi } from "../api/services";
-import type { SevrFile } from "../types";
+import type { SevrFile, FileVersion, FileReviewNote, DocumentLifecycleState } from "../types";
 import TlpBadge from "../components/tlp/TlpBadge";
+import DocumentLifecycleStepper from "../components/lifecycle/DocumentLifecycleStepper";
+import ReviewNotesPanel from "../components/lifecycle/ReviewNotesPanel";
+import VersionHistoryDrawer from "../components/lifecycle/VersionHistoryDrawer";
+import { readAuthSession } from "./LoginPage";
 
 function formatBytes(bytes?: number): string {
   if (!bytes || bytes === 0) return "0 Bytes";
@@ -29,16 +34,30 @@ function formatBytes(bytes?: number): string {
 export default function FileDetailPage() {
   const { projectId = "", fileId = "" } = useParams<{ projectId: string; fileId: string }>();
   const [file, setFile] = useState<SevrFile | null>(null);
+  const [versions, setVersions] = useState<FileVersion[]>([]);
+  const [notes, setNotes] = useState<FileReviewNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copiedChecksum, setCopiedChecksum] = useState(false);
+  const [showVersionDrawer, setShowVersionDrawer] = useState(false);
 
-  const loadFile = async () => {
+  const session = readAuthSession();
+  const isSupervisor = ["supervisor", "institution_admin", "system_admin"].includes(session?.role ?? "");
+
+  const loadFileAndLifecycle = async () => {
     setLoading(true);
     setError("");
     try {
-      const data = await filesApi.get(projectId, fileId);
-      setFile(data);
+      const fileData = await filesApi.get(projectId, fileId);
+      setFile(fileData);
+
+      // Load versions and review notes asynchronously
+      const [verData, noteData] = await Promise.all([
+        filesApi.listVersions(projectId, fileId).catch(() => []),
+        filesApi.listNotes(projectId, fileId).catch(() => []),
+      ]);
+      setVersions(verData);
+      setNotes(noteData);
     } catch {
       setError("Unable to retrieve file metadata from enclave storage.");
     } finally {
@@ -47,7 +66,7 @@ export default function FileDetailPage() {
   };
 
   useEffect(() => {
-    loadFile();
+    loadFileAndLifecycle();
   }, [projectId, fileId]);
 
   const copyChecksum = () => {
@@ -57,9 +76,46 @@ export default function FileDetailPage() {
     setTimeout(() => setCopiedChecksum(false), 2000);
   };
 
+  const handleStateTransition = async (toState: DocumentLifecycleState, reasonNote?: string) => {
+    if (!file) return;
+    try {
+      await filesApi.transitionState(projectId, fileId, toState, reasonNote);
+      setFile({ ...file, lifecycleState: toState });
+
+      // Refresh notes if a reason note was provided
+      if (reasonNote) {
+        const updatedNotes = await filesApi.listNotes(projectId, fileId);
+        setNotes(updatedNotes);
+      }
+    } catch {
+      alert("Failed to advance document lifecycle state.");
+    }
+  };
+
+  const handleAddNote = async (content: string, noteType: FileReviewNote["noteType"]) => {
+    try {
+      const createdNote = await filesApi.addNote(projectId, fileId, noteType, content);
+      setNotes([createdNote, ...notes]);
+    } catch {
+      alert("Failed to record review note.");
+    }
+  };
+
+  const handleUploadNewVersion = async (fileObj: File, summary: string) => {
+    try {
+      const createdVer = await filesApi.uploadVersion(projectId, fileId, fileObj, summary);
+      setVersions([createdVer, ...versions]);
+      if (file) {
+        setFile({ ...file, versionCount: file.versionCount + 1 });
+      }
+    } catch {
+      alert("Failed to ingest new version.");
+    }
+  };
+
   if (loading) {
     return (
-      <div className="max-w-3xl space-y-6">
+      <div className="max-w-4xl space-y-6">
         <div className="h-4 w-32 bg-slate-200 animate-pulse" />
         <div className="border border-slate-200 bg-white p-6 space-y-4 animate-pulse">
           <div className="h-6 w-1/2 bg-slate-200" />
@@ -82,7 +138,7 @@ export default function FileDetailPage() {
         <div className="flex items-center gap-3 pt-2">
           <button
             type="button"
-            onClick={loadFile}
+            onClick={loadFileAndLifecycle}
             className="flex items-center gap-1.5 border border-rose-300 bg-white px-3 py-1.5 text-xs font-semibold text-rose-800 hover:bg-rose-50"
           >
             <RefreshCw className="h-3.5 w-3.5" />
@@ -101,7 +157,7 @@ export default function FileDetailPage() {
   }
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       {/* Breadcrumb back navigation */}
       <Link
         to={`/projects/${projectId}`}
@@ -127,8 +183,25 @@ export default function FileDetailPage() {
             </p>
           </div>
         </div>
-        <TlpBadge label={file.tlpLabel} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowVersionDrawer(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-xs hover:bg-slate-50"
+          >
+            <History className="h-3.5 w-3.5 text-emerald-600" />
+            Version History ({versions.length || file.versionCount})
+          </button>
+          <TlpBadge label={file.tlpLabel} />
+        </div>
       </header>
+
+      {/* Document Lifecycle Stepper Component */}
+      <DocumentLifecycleStepper
+        currentState={file.lifecycleState ?? "DRAFT"}
+        onTransition={handleStateTransition}
+        isSupervisor={isSupervisor}
+      />
 
       {/* Metadata Grid */}
       <section className="grid gap-4 sm:grid-cols-2" aria-label="File metadata">
@@ -161,7 +234,7 @@ export default function FileDetailPage() {
       </section>
 
       {/* Checksum Card */}
-      <section className="border border-slate-200 bg-white p-4">
+      <section className="border border-slate-200 bg-white p-4 rounded-xl shadow-xs">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
             <Hash className="h-4 w-4 text-emerald-600" />
@@ -190,13 +263,27 @@ export default function FileDetailPage() {
         </p>
       </section>
 
+      {/* Review Notes & Justification Panel */}
+      <ReviewNotesPanel
+        notes={notes}
+        onAddNote={handleAddNote}
+        currentUserName={session?.name || session?.email || "Researcher"}
+      />
+
       {/* Actions */}
-      <section className="border border-slate-200 bg-white p-5 space-y-3">
+      <section className="border border-slate-200 bg-white p-5 space-y-3 rounded-xl shadow-xs">
         <h2 className="text-sm font-bold text-slate-900">Enclave Governance Actions</h2>
         <p className="text-xs leading-5 text-slate-500">
           Per Section 8 of the SeVR Implementation Specification, all files must undergo watermarking preview and release verification prior to signed link generation.
         </p>
         <div className="flex flex-wrap gap-3 pt-2">
+          <Link
+            to={`/projects/${projectId}/files/${file.id}/edit`}
+            className="flex items-center gap-2 bg-[#0b2528] px-4 py-2 text-xs font-bold text-white hover:bg-teal-900 transition rounded-lg shadow-xs"
+          >
+            <Edit3 className="h-4 w-4 text-emerald-400" />
+            <span>Open Editor Sandbox</span>
+          </Link>
           <Link
             to={`/projects/${projectId}/files/${file.id}/preview`}
             className="flex items-center gap-2 bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 transition rounded-lg shadow-xs"
@@ -213,13 +300,22 @@ export default function FileDetailPage() {
           </Link>
         </div>
       </section>
+
+      {/* Slide-out Version History Drawer */}
+      <VersionHistoryDrawer
+        versions={versions}
+        currentVersionNumber={`${file.versionCount}.0`}
+        onUploadNewVersion={handleUploadNewVersion}
+        isOpen={showVersionDrawer}
+        onClose={() => setShowVersionDrawer(false)}
+      />
     </div>
   );
 }
 
 function Metadata({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="border border-slate-200 bg-white p-4">
+    <div className="border border-slate-200 bg-white p-4 rounded-xl shadow-xs">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
         {icon}
         {label}
@@ -228,3 +324,4 @@ function Metadata({ icon, label, value }: { icon: ReactNode; label: string; valu
     </div>
   );
 }
+

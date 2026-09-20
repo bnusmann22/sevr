@@ -933,6 +933,199 @@ export const handlers = [
     return HttpResponse.json(created, { status: 201 });
   }),
 
+  // File versions list & upload
+  http.get(`${BASE}/projects/:projectId/files/:fileId/versions`, ({ params }) => {
+    const fileId = String(params.fileId);
+    const versionsStore = loadFromStorage<Record<string, any[]>>("sevr_mock_versions", {});
+    if (!versionsStore[fileId]) {
+      versionsStore[fileId] = [
+        {
+          id: `ver_1`,
+          fileId,
+          versionNumber: "1.0",
+          checksumSha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          sizeBytes: 1048576,
+          createdBy: "Dr. Ada Okafor",
+          changeSummary: "Initial manuscript upload into research enclave",
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      saveToStorage("sevr_mock_versions", versionsStore);
+    }
+    return HttpResponse.json(versionsStore[fileId]);
+  }),
+
+  http.post(`${BASE}/projects/:projectId/files/:fileId/versions`, async ({ params, request }) => {
+    const projectId = String(params.projectId);
+    const fileId = String(params.fileId);
+    const body = await request.formData();
+    const changeSummary = (body.get("changeSummary") as string) || "Ingested revised version";
+    const uploadedFile = body.get("file");
+    const file = filesStore.find((f) => f.id === fileId);
+
+    let newText = "";
+    let size = 1548576;
+    if (uploadedFile instanceof File) {
+      try {
+        newText = await uploadedFile.text();
+        size = uploadedFile.size;
+      } catch { /* ignore */ }
+    }
+
+    if (newText) {
+      const contentsStore = loadFromStorage<Record<string, string>>("sevr_mock_file_contents", {});
+      contentsStore[fileId] = newText;
+      saveToStorage("sevr_mock_file_contents", contentsStore);
+    }
+
+    const versionsStore = loadFromStorage<Record<string, any[]>>("sevr_mock_versions", {});
+    const existing = versionsStore[fileId] || [];
+    const nextVerNum = `${existing.length + 1}.0`;
+
+    const newVersion = {
+      id: `ver_${Date.now()}`,
+      fileId,
+      versionNumber: nextVerNum,
+      checksumSha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
+      sizeBytes: size,
+      createdBy: defaultLogin.name,
+      changeSummary,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!versionsStore[fileId]) versionsStore[fileId] = [];
+    versionsStore[fileId].unshift(newVersion);
+    saveToStorage("sevr_mock_versions", versionsStore);
+
+    if (file) {
+      file.versionCount = (file.versionCount || 1) + 1;
+      file.sizeBytes = size;
+      file.checksumSha256 = newVersion.checksumSha256;
+      saveToStorage("sevr_mock_files", filesStore);
+    }
+
+    recordActivity(projectId, "upload", defaultLogin.name, `Ingested version v${nextVerNum} for asset "${file?.name ?? fileId}"`);
+    return HttpResponse.json(newVersion, { status: 201 });
+  }),
+
+  // Update file content via in-enclave sandbox
+  http.put(`${BASE}/projects/:projectId/files/:fileId/content`, async ({ params, request }) => {
+    const projectId = String(params.projectId);
+    const fileId = String(params.fileId);
+    const body = (await request.json()) as { content?: string; changeSummary?: string };
+    const newContent = body.content || "";
+    const changeSummary = body.changeSummary || "Updated content via in-enclave editor sandbox";
+
+    const contentsStore = loadFromStorage<Record<string, string>>("sevr_mock_file_contents", {});
+    contentsStore[fileId] = newContent;
+    saveToStorage("sevr_mock_file_contents", contentsStore);
+
+    const file = filesStore.find((f) => f.id === fileId);
+    const versionsStore = loadFromStorage<Record<string, any[]>>("sevr_mock_versions", {});
+    const existing = versionsStore[fileId] || [];
+    const nextVerNum = `${existing.length + 1}.0`;
+
+    const newVersion = {
+      id: `ver_${Date.now()}`,
+      fileId,
+      versionNumber: nextVerNum,
+      checksumSha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(""),
+      sizeBytes: new Blob([newContent]).size,
+      createdBy: defaultLogin.name,
+      changeSummary,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!versionsStore[fileId]) versionsStore[fileId] = [];
+    versionsStore[fileId].unshift(newVersion);
+    saveToStorage("sevr_mock_versions", versionsStore);
+
+    if (file) {
+      file.versionCount = (file.versionCount || 1) + 1;
+      file.sizeBytes = newVersion.sizeBytes;
+      file.checksumSha256 = newVersion.checksumSha256;
+      saveToStorage("sevr_mock_files", filesStore);
+    }
+
+    recordActivity(projectId, "upload", defaultLogin.name, `Committed version v${nextVerNum} for asset "${file?.name ?? fileId}"`);
+    return HttpResponse.json(file);
+  }),
+
+  // Review notes list & post
+  http.get(`${BASE}/projects/:projectId/files/:fileId/notes`, ({ params }) => {
+    const fileId = String(params.fileId);
+    const notesStore = loadFromStorage<Record<string, any[]>>("sevr_mock_notes", {});
+    if (!notesStore[fileId]) {
+      notesStore[fileId] = [
+        {
+          id: `note_1`,
+          fileId,
+          authorId: "user_001",
+          authorName: "Dr. Ada Okafor",
+          noteType: "SUPERVISOR_JUSTIFICATION",
+          content: "Enclave asset verified under TLP:AMBER governance rules.",
+          createdAt: new Date().toISOString(),
+        },
+      ];
+      saveToStorage("sevr_mock_notes", notesStore);
+    }
+    return HttpResponse.json(notesStore[fileId]);
+  }),
+
+  http.post(`${BASE}/projects/:projectId/files/:fileId/notes`, async ({ params, request }) => {
+    const projectId = String(params.projectId);
+    const fileId = String(params.fileId);
+    const body = (await request.json()) as any;
+
+    const notesStore = loadFromStorage<Record<string, any[]>>("sevr_mock_notes", {});
+    const newNote = {
+      id: `note_${Date.now()}`,
+      fileId,
+      versionId: body.versionId,
+      authorId: defaultLogin.email,
+      authorName: defaultLogin.name,
+      noteType: body.noteType ?? "PEER_COMMENT",
+      content: body.content,
+      createdAt: new Date().toISOString(),
+    };
+
+    if (!notesStore[fileId]) notesStore[fileId] = [];
+    notesStore[fileId].unshift(newNote);
+    saveToStorage("sevr_mock_notes", notesStore);
+
+    recordActivity(projectId, "view", defaultLogin.name, `Posted ${body.noteType ?? "review note"} on asset`);
+    return HttpResponse.json(newNote, { status: 201 });
+  }),
+
+  // State transition handler
+  http.post(`${BASE}/projects/:projectId/files/:fileId/transition`, async ({ params, request }) => {
+    const projectId = String(params.projectId);
+    const fileId = String(params.fileId);
+    const body = (await request.json()) as any;
+    const file = filesStore.find((f) => f.id === fileId);
+
+    const fromState = file?.lifecycleState ?? "DRAFT";
+    const toState = body.toState;
+
+    if (file) {
+      file.lifecycleState = toState;
+      saveToStorage("sevr_mock_files", filesStore);
+    }
+
+    const transition = {
+      id: `trans_${Date.now()}`,
+      fileId,
+      fromState,
+      toState,
+      actorId: defaultLogin.email,
+      reasonNote: body.reasonNote,
+      createdAt: new Date().toISOString(),
+    };
+
+    recordActivity(projectId, "settings", defaultLogin.name, `Advanced asset state from ${fromState} to ${toState}`);
+    return HttpResponse.json(transition, { status: 200 });
+  }),
+
   // File raw text content
   http.get(`${BASE}/projects/:projectId/files/:fileId/content`, ({ params }) => {
     const fileId = String(params.fileId);

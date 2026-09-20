@@ -25,6 +25,7 @@ import AuthStatusPage from "./pages/AuthStatusPage";
 import FileDetailPage from "./pages/FileDetailPage";
 import FilePreviewPage from "./pages/FilePreviewPage";
 import ReleaseReviewPage from "./pages/ReleaseReviewPage";
+import EnclaveEditorSandboxPage from "./pages/EnclaveEditorSandboxPage";
 import AdminUsersPage from "./pages/AdminUsersPage";
 
 function AppLoadingBoundary() {
@@ -106,6 +107,7 @@ function ProtectedApp() {
         <Route path="/projects" element={<ProjectListPage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspace />} />
         <Route path="/projects/:projectId/files/:fileId" element={<FileDetailPage />} />
+        <Route path="/projects/:projectId/files/:fileId/edit" element={<EnclaveEditorSandboxPage />} />
         <Route path="/projects/:projectId/files/:fileId/preview" element={<FilePreviewPage />} />
         <Route path="/projects/:projectId/files/:fileId/release" element={<ReleaseReviewPage />} />
         <Route path="/projects/:projectId/upload" element={<UploadPage />} />
