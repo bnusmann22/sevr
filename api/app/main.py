@@ -1452,6 +1452,20 @@ def get_file_content(
         except Exception as err:
             print(f"[Storage Error] Failed reading local disk asset: {err}")
 
+    # Candidate search if local_path filename differed slightly
+    if raw_bytes is None and os.path.exists(UPLOAD_DIR):
+        try:
+            for fname in os.listdir(UPLOAD_DIR):
+                if fname.startswith(f"{file_rec.id}_"):
+                    candidate_path = os.path.join(UPLOAD_DIR, fname)
+                    if os.path.isfile(candidate_path):
+                        with open(candidate_path, "rb") as f:
+                            raw_bytes = f.read()
+                        if raw_bytes:
+                            break
+        except Exception as search_err:
+            print(f"[Storage Search Warning] {search_err}")
+
     if raw_bytes is None:
         try:
             nc_client = NextcloudClient()
@@ -1462,10 +1476,10 @@ def get_file_content(
     content_str: str | None = None
 
     if raw_bytes:
-        ext = (file_rec.original_format or file_rec.name.split(".")[-1]).lower()
+        ext = (file_rec.original_format or file_rec.name.split(".")[-1]).strip().lower()
 
         # PDF Text Extraction using pypdf
-        if ext == "pdf" or raw_bytes.startswith(b"%PDF-"):
+        if ext in ("pdf", "pdf") or raw_bytes.startswith(b"%PDF-"):
             try:
                 import io
                 from pypdf import PdfReader
@@ -1480,15 +1494,53 @@ def get_file_content(
             except Exception as pdf_err:
                 print(f"[PDF Parsing Error] {pdf_err}")
 
-        # DOCX / DOC Text Extraction (Handles standard docx, Google Docs exported docx with AltChunk MHT, and Word XML)
+        # DOCX / DOC Text Extraction (Robust XML, AltChunk MHT, docx2txt, and python-docx)
         if not content_str and (ext in ("docx", "doc") or raw_bytes.startswith(b"PK\x03\x04")):
-            # Method 1: Check for AltChunk MHT HTML stream (Google Docs exported docx)
+            # Method 1: Robust XML Namespace Independent Extraction
             try:
-                import io, zipfile, quopri, re
+                import io, zipfile, xml.etree.ElementTree as ET
                 with zipfile.ZipFile(io.BytesIO(raw_bytes)) as z:
-                    names = z.namelist()
-                    mht_files = [n for n in names if n.endswith(".mht") or "afchunk" in n]
-                    if mht_files:
+                    doc_entry = None
+                    for name in z.namelist():
+                        if name.endswith("word/document.xml") or name == "word/document.xml":
+                            doc_entry = name
+                            break
+
+                    if doc_entry:
+                        xml_data = z.read(doc_entry)
+                        tree = ET.fromstring(xml_data)
+                        paras = []
+                        for elem in tree.iter():
+                            tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                            if tag == "p":
+                                p_txts = []
+                                for child in elem.iter():
+                                    c_tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                                    if c_tag == "t" and child.text:
+                                        p_txts.append(child.text)
+                                p_str = "".join(p_txts).strip()
+                                if p_str:
+                                    paras.append(p_str)
+                        if paras:
+                            content_str = "\n\n".join(paras)
+                        else:
+                            # Direct text node extraction fallback
+                            all_texts = []
+                            for elem in tree.iter():
+                                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                                if tag == "t" and elem.text and elem.text.strip():
+                                    all_texts.append(elem.text.strip())
+                            if all_texts:
+                                content_str = "\n".join(all_texts)
+            except Exception as xml_err:
+                print(f"[DOCX XML Extraction Error] {xml_err}")
+
+            # Method 2: Check for AltChunk MHT HTML stream (Google Docs exported docx)
+            if not content_str:
+                try:
+                    import io, zipfile, quopri, re
+                    with zipfile.ZipFile(io.BytesIO(raw_bytes)) as z:
+                        mht_files = [n for n in z.namelist() if n.endswith(".mht") or "afchunk" in n]
                         for mht_name in mht_files:
                             raw_mht = z.read(mht_name)
                             decoded_mht = quopri.decodestring(raw_mht).decode("utf-8", errors="ignore")
@@ -1504,47 +1556,18 @@ def get_file_content(
                             if lines:
                                 content_str = "\n\n".join(lines)
                                 break
-            except Exception as mht_err:
-                print(f"[AltChunk MHT Extract Error] {mht_err}")
+                except Exception as mht_err:
+                    print(f"[AltChunk MHT Extract Error] {mht_err}")
 
-            # Method 2: Standard word/document.xml paragraph & table extraction
-            if not content_str:
-                try:
-                    import io, zipfile, xml.etree.ElementTree as ET
-                    with zipfile.ZipFile(io.BytesIO(raw_bytes)) as z:
-                        if "word/document.xml" in z.namelist():
-                            xml_content = z.read("word/document.xml")
-                            tree = ET.fromstring(xml_content)
-                            paras = []
-                            for p in tree.iter():
-                                if p.tag.endswith("}p"):
-                                    p_txts = [n.text for n in p.iter() if n.tag.endswith("}t") and n.text]
-                                    if p_txts:
-                                        paras.append("".join(p_txts).strip())
-                            if paras:
-                                content_str = "\n\n".join(paras)
-                except Exception as xml_err:
-                    print(f"[DOCX XML Extract Error] {xml_err}")
-
-            # Method 3: docx2txt
-            if not content_str:
-                try:
-                    import io, docx2txt
-                    processed = docx2txt.process(io.BytesIO(raw_bytes))
-                    if processed and processed.strip():
-                        content_str = processed.strip()
-                except Exception as d_err:
-                    print(f"[docx2txt Error] {d_err}")
-
-            # Method 4: python-docx
+            # Method 3: python-docx
             if not content_str:
                 try:
                     import io, docx
                     doc = docx.Document(io.BytesIO(raw_bytes))
-                    paras = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
+                    paras = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
                     for table in doc.tables:
                         for row in table.rows:
-                            row_txt = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                            row_txt = " | ".join(cell.text.strip() for cell in row.cells if cell.text and cell.text.strip())
                             if row_txt:
                                 paras.append(row_txt)
                     if paras:
@@ -1552,19 +1575,13 @@ def get_file_content(
                 except Exception as d_err2:
                     print(f"[python-docx Error] {d_err2}")
 
-        # Plain text / CSV / JSON / FASTA / code / Markdown ONLY if not a binary container
-        is_binary_container = (
-            raw_bytes.startswith(b"PK\x03\x04") or
-            raw_bytes.startswith(b"%PDF-") or
-            ext in ("docx", "doc", "pdf", "zip", "rar", "gz", "tar", "7z", "xlsx", "pptx", "exe", "dll", "so")
-        )
-
-        if not content_str and not is_binary_container:
+        # Plain text / CSV / JSON / FASTA / code / Markdown text decoding fallback
+        if not content_str:
             try:
-                decoded = raw_bytes.decode("utf-8", errors="replace")
+                decoded = raw_bytes.decode("utf-8", errors="ignore")
                 printable_count = sum(1 for c in decoded if c.isprintable() or c in "\n\r\t")
-                if len(decoded) > 0 and (printable_count / len(decoded)) > 0.75:
-                    content_str = decoded
+                if len(decoded) > 0 and (printable_count / len(decoded)) > 0.60:
+                    content_str = decoded.strip()
             except Exception:
                 content_str = None
 

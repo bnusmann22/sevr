@@ -1051,6 +1051,29 @@ export const handlers = [
     return HttpResponse.json(file);
   }),
 
+  // Get file content stream for editor & preview
+  http.get(`${BASE}/projects/:projectId/files/:fileId/content`, ({ params }) => {
+    const fileId = String(params.fileId);
+    const contentsStore = loadFromStorage<Record<string, string>>("sevr_mock_file_contents", {});
+    const file = filesStore.find((f) => f.id === fileId);
+
+    if (contentsStore[fileId]) {
+      return HttpResponse.json({
+        content: contentsStore[fileId],
+        name: file?.name ?? fileId,
+        format: file?.originalFormat ?? "docx",
+      });
+    }
+
+    const defaultText = `Executive Summary: SWE Week 2025\n\nTo: Head, Department of Software Engineering\nFrom: Local Organizing Committee (L.O.C)\nDate: September 2025\n\nOverview of the project:\nSWE Week 2025 is a week-long celebration of innovation, technical growth, and student excellence within the Faculty of Computing, Bayero University Kano. Anchored by two flagship competitions—Py-Kathon 2.0 and Javineer—this initiative charts a developmental journey from foundational programming to professional-grade engineering.`;
+
+    return HttpResponse.json({
+      content: defaultText,
+      name: file?.name ?? fileId,
+      format: file?.originalFormat ?? "docx",
+    });
+  }),
+
   // Review notes list & post
   http.get(`${BASE}/projects/:projectId/files/:fileId/notes`, ({ params }) => {
     const fileId = String(params.fileId);
